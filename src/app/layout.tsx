@@ -7,6 +7,10 @@ export const metadata: Metadata = {
   title: "RemoteMCU — Remote Hardware Debugging & Management Platform",
   description:
     "Write code, compile, flash, and debug microcontroller boards remotely from your browser. Support for ESP32, Arduino, STM32, and more. No drivers required.",
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useAdminUsers } from "@/lib/hooks/useAdminUsers";
-import { updateUserRole, updateUserStatus, updateUserCredits, UserProfile } from "@/lib/firestore/users";
+import { updateUserRole, updateUserStatus, updateUserCredits, createUserDocument, UserProfile } from "@/lib/firestore/users";
 import { createAdminLog } from "@/lib/firestore/adminLogs";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 
 export default function AdminUsersPage() {
   const { user: currentUser, isAdmin, loading: authLoading } = useAuth();
@@ -17,6 +18,9 @@ export default function AdminUsersPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editCredits, setEditCredits] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newUser, setNewUser] = useState({ email: "", password: "", name: "", role: "user" as "user" | "admin" });
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     if (!authLoading && (!currentUser || !isAdmin)) {
@@ -83,12 +87,56 @@ export default function AdminUsersPage() {
           "committed"
         );
       }
+      refresh();
       setEditingUser(null);
       setEditCredits("");
-      refresh();
     } catch (error) {
       console.error("Failed to update credits:", error);
     }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUser.email || !newUser.password || !newUser.name) return;
+    
+    setCreating(true);
+    try {
+      const auth = getAuth();
+      const userCredential = await createUserWithEmailAndPassword(auth, newUser.email, newUser.password);
+      const uid = userCredential.user.uid;
+      
+      await createUserDocument(uid, {
+        email: newUser.email,
+        displayName: newUser.name,
+        photoURL: null,
+        role: newUser.role,
+        credits: 10,
+        plan: "free",
+        deviceQuota: 3,
+        status: "active",
+        lastActiveAt: null,
+      });
+      
+      if (currentUser) {
+        await createAdminLog(
+          currentUser.uid,
+          currentUser.displayName || currentUser.email || "Admin",
+          "CREATE_USER",
+          "users",
+          uid,
+          `Created new user: ${newUser.email}`,
+          "committed"
+        );
+      }
+      
+      setShowCreateModal(false);
+      setNewUser({ email: "", password: "", name: "", role: "user" });
+      refresh();
+    } catch (error: any) {
+      console.error("Failed to create user:", error);
+      alert(error.message || "Failed to create user");
+    }
+    setCreating(false);
   };
 
   const filteredUsers = users.filter((u) => {
@@ -114,6 +162,13 @@ export default function AdminUsersPage() {
           <h2 className="text-[10px] font-mono tracking-[0.3em] text-primary uppercase">Admin Control</h2>
           <h1 className="text-5xl font-extrabold tracking-tight text-on-surface">User Management</h1>
         </div>
+        <button 
+          onClick={() => setShowCreateModal(true)}
+          className="px-6 py-3 bg-primary text-on-primary font-bold rounded-lg hover:brightness-110 transition-all flex items-center gap-2"
+        >
+          <span className="material-symbols-outlined text-sm">person_add</span>
+          Add User
+        </button>
       </header>
 
       <div className="flex items-center gap-4 mb-8">
@@ -271,6 +326,78 @@ export default function AdminUsersPage() {
                 Save
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#2D2D2D] border border-[#3C3C3C] rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-on-surface mb-4">Add New User</h3>
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="text-xs font-mono text-on-surface-variant uppercase">Name</label>
+                <input
+                  type="text"
+                  value={newUser.name}
+                  onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                  className="w-full bg-[#1E1E1E] border border-[#3C3C3C] rounded px-4 py-2 text-on-surface"
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-mono text-on-surface-variant uppercase">Email</label>
+                <input
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                  className="w-full bg-[#1E1E1E] border border-[#3C3C3C] rounded px-4 py-2 text-on-surface"
+                  placeholder="user@example.com"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-mono text-on-surface-variant uppercase">Password</label>
+                <input
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                  className="w-full bg-[#1E1E1E] border border-[#3C3C3C] rounded px-4 py-2 text-on-surface"
+                  placeholder="Min 6 characters"
+                  minLength={6}
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-mono text-on-surface-variant uppercase">Role</label>
+                <select
+                  value={newUser.role}
+                  onChange={(e) => setNewUser({...newUser, role: e.target.value as "user" | "admin"})}
+                  className="w-full bg-[#1E1E1E] border border-[#3C3C3C] rounded px-4 py-2 text-on-surface"
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 px-4 py-2 border border-white/10 text-white/60 rounded hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="flex-1 px-4 py-2 bg-primary text-on-primary font-bold rounded hover:brightness-110 transition-all disabled:opacity-50"
+                >
+                  {creating ? "Creating..." : "Create User"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
