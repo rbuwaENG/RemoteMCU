@@ -1,0 +1,162 @@
+"use client";
+
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
+import Link from "next/link";
+
+export default function AboutPage() {
+  return (
+    <>
+      <Navbar />
+
+      <main className="bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container antialiased">
+        {/* Hero Section */}
+        <section className="relative overflow-hidden rounded-xl mb-16 h-[400px] flex items-center bg-surface-container-low border border-white/5">
+          <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent"></div>
+          <div className="relative z-10 px-12 max-w-2xl">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-[2px] w-12 bg-primary"></div>
+              <span className="font-mono text-xs tracking-widest text-primary uppercase">Mission Protocol</span>
+            </div>
+            <h1 className="text-5xl font-extrabold tracking-tighter text-on-surface mb-6 leading-tight">
+              Hardware Debugging, <span className="text-primary italic">Redefined.</span>
+            </h1>
+            <p className="text-lg text-on-surface-variant leading-relaxed">
+              At Remote MCU, we're building the bridge between digital innovation and physical hardware. A digital cockpit for the modern hardware engineer.
+            </p>
+            <div className="mt-8 flex gap-4">
+              <Link href="/dashboard/devices" className="bg-primary text-on-primary px-6 py-3 rounded font-bold tracking-tight text-sm active:scale-95 transition-transform flex items-center">
+                Explore Devices
+              </Link>
+              <Link href="/docs" className="border border-outline-variant text-on-surface px-6 py-3 rounded font-bold tracking-tight text-sm hover:bg-surface-container-high transition-colors">
+                Read Docs
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* Team Section */}
+        <section className="mb-24 max-w-[1440px] mx-auto px-8">
+          <div className="flex items-baseline justify-between mb-12">
+            <h2 className="text-3xl font-black tracking-tight text-on-surface">Meet the Team</h2>
+            <span className="font-mono text-[10px] text-on-surface-variant uppercase tracking-widest">Engineering Collective / 03</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Alex Rivera */}
+            <div className="bg-surface-container-low p-8 rounded-lg group hover:bg-surface-container-high transition-colors border border-white/5">
+              <div className="relative w-20 h-20 mb-6">
+                <div className="w-20 h-20 rounded-full border-2 border-primary grayscale group-hover:grayscale-0 transition-all duration-500 bg-gradient-to-br from-primary/20 to-primary-container/20 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-4xl text-primary">person</span>
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full"></div>
+              </div>
+              <h3 className="text-xl font-bold mb-1 text-on-surface">Alex Rivera</h3>
+              <p className="text-primary font-mono text-xs mb-4 uppercase tracking-wider">Senior Architect</p>
+              <p className="text-sm text-on-surface-variant leading-relaxed">
+                Veteran systems designer specializing in low-latency communication protocols and secure cloud-to-hardware handshakes.
+              </p>
+            </div>
+            {/* Sarah Chen */}
+            <div className="bg-surface-container-low p-8 rounded-lg group hover:bg-surface-container-high transition-colors border border-white/5">
+              <div className="relative w-20 h-20 mb-6">
+                <div className="w-20 h-20 rounded-full border-2 border-primary grayscale group-hover:grayscale-0 transition-all duration-500 bg-gradient-to-br from-primary/20 to-primary-container/20 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-4xl text-primary">person</span>
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full"></div>
+              </div>
+              <h3 className="text-xl font-bold mb-1 text-on-surface">Sarah Chen</h3>
+              <p className="text-primary font-mono text-xs mb-4 uppercase tracking-wider">Hardware Lead</p>
+              <p className="text-sm text-on-surface-variant leading-relaxed">
+                Leading the development of our custom bridge modules. Sarah ensures every millivolt is accounted for in our synthetic workshop.
+              </p>
+            </div>
+            {/* Marcus Thorne */}
+            <div className="bg-surface-container-low p-8 rounded-lg group hover:bg-surface-container-high transition-colors border border-white/5">
+              <div className="relative w-20 h-20 mb-6">
+                <div className="w-20 h-20 rounded-full border-2 border-primary grayscale group-hover:grayscale-0 transition-all duration-500 bg-gradient-to-br from-primary/20 to-primary-container/20 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-4xl text-primary">person</span>
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full"></div>
+              </div>
+              <h3 className="text-xl font-bold mb-1 text-on-surface">Marcus Thorne</h3>
+              <p className="text-primary font-mono text-xs mb-4 uppercase tracking-wider">Security Principal</p>
+              <p className="text-sm text-on-surface-variant leading-relaxed">
+                Dedicated to zero-trust hardware access. Marcus built the encryption layer that protects over 10,000 active remote devices.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Story Section */}
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-16 max-w-[1440px] mx-auto px-8 mb-24">
+          <div className="lg:col-span-5">
+            <div className="sticky top-24">
+              <h2 className="text-4xl font-black tracking-tighter mb-8 text-on-surface leading-none">The Genesis of the Synthetic Workshop</h2>
+              <div className="space-y-6 text-on-surface-variant">
+                <p className="leading-relaxed">
+                  Remote MCU didn't start in a boardroom. It started in a cluttered garage where long-distance collaboration on physical prototypes felt like an impossible dream.
+                </p>
+                <p className="leading-relaxed">
+                  We saw engineers spending more time on logistics than on logic. We saw the gap between the speed of software development and the friction of hardware iteration.
+                </p>
+                <div className="bg-surface-container-high p-6 rounded-lg border-l-4 border-primary">
+                  <span className="text-primary font-mono text-sm block mb-2">// CORE PHILOSOPHY</span>
+                  <p className="italic text-on-surface">"Physical hardware should be as accessible as a cloud server. Geography should not be a bottleneck for innovation."</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="lg:col-span-7 space-y-12">
+            {/* Timeline Entry 1 */}
+            <div className="relative pl-12 border-l border-outline-variant/30">
+              <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-primary"></div>
+              <span className="font-mono text-xs text-primary mb-2 block tracking-widest">EST. 2019</span>
+              <h4 className="text-xl font-bold mb-3 text-on-surface">Open-Source Roots</h4>
+              <p className="text-on-surface-variant text-sm leading-relaxed">
+                Founded as an open-source tool for remote ESP32 debugging. Within months, the community grew to 5,000 developers worldwide, proving the demand for remote hardware access.
+              </p>
+            </div>
+            {/* Timeline Entry 2 */}
+            <div className="relative pl-12 border-l border-outline-variant/30">
+              <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-primary/50"></div>
+              <span className="font-mono text-xs text-on-surface-variant mb-2 block tracking-widest">2021</span>
+              <h4 className="text-xl font-bold mb-3 text-on-surface">The Bridge Architecture</h4>
+              <p className="text-on-surface-variant text-sm leading-relaxed">
+                Developed the proprietary 'MCU Bridge'—a low-latency hardware interface that allowed engineers to flash and debug physical boards from across the globe with less than 50ms of delay.
+              </p>
+            </div>
+            {/* Timeline Entry 3 */}
+            <div className="relative pl-12 border-l border-outline-variant/30">
+              <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-primary/50"></div>
+              <span className="font-mono text-xs text-on-surface-variant mb-2 block tracking-widest">PRESENT</span>
+              <h4 className="text-xl font-bold mb-3 text-on-surface">The Enterprise Pivot</h4>
+              <p className="text-on-surface-variant text-sm leading-relaxed">
+                Now supporting over 50 global engineering firms, Remote MCU provides the infrastructure for distributed hardware teams to ship products faster than ever before.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="mt-32 pt-16 border-t border-outline-variant/10 text-center pb-8">
+          <h3 className="text-2xl font-bold mb-10 text-on-surface">Ready to join the future of engineering?</h3>
+          <div className="flex flex-col sm:flex-row justify-center items-center gap-6 mb-16">
+            <a className="flex items-center gap-3 px-8 py-4 bg-[#00979D] text-white rounded font-bold tracking-tight hover:brightness-110 transition-all active:scale-95" href="#">
+              <span className="material-symbols-outlined">forum</span>
+              Discord Channel
+            </a>
+            <a className="flex items-center gap-3 px-8 py-4 bg-[#00979D] text-white rounded font-bold tracking-tight hover:brightness-110 transition-all active:scale-95" href="#">
+              <span className="material-symbols-outlined">coffee</span>
+              Buy Me a Coffee
+            </a>
+          </div>
+          <p className="font-mono text-[10px] text-outline opacity-50 uppercase tracking-widest">
+            © 2024 Remote MCU Systems Ltd. // All Rights Reserved.
+          </p>
+        </footer>
+      </main>
+
+      <Footer />
+    </>
+  );
+}

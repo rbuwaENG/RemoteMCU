@@ -1,0 +1,12 @@
+paho-mqtt>=1.6.1
+pyserial>=3.5
+opencv-python>=4.8.0
+esptool>=4.7.0
+pyudev>=0.24
+python-dotenv>=1.0.0
+requests>=2.31.0
+google-auth>=2.23.0
+google-auth-httplib2>=0.1.1
+# System tray app
+pystray>=0.19.5
+Pillow>=10.0.0
