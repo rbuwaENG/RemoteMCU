@@ -1,42 +1,53 @@
-import { useState, useEffect } from "react";
-import { subscribeToDevicesByOwner, Device } from "@/lib/firestore/devices";
+import { useState, useEffect, useCallback } from "react";
+import { subscribeToDevicesByOwner, subscribeToSharedDevices, Device } from "@/lib/firestore/devices";
 
-export const useDevices = (ownerId: string | undefined) => {
+export const useDevices = (userId: string | undefined) => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = useCallback(() => {
+    setRefreshKey(k => k + 1);
+  }, []);
 
   useEffect(() => {
-    if (!ownerId) {
+    if (!userId) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    const unsubscribe = subscribeToDevicesByOwner(ownerId, (fetchedDevices) => {
-      // Map over devices and forcefully set them to offline if their heartbeat is stale (> 2 mins)
-      const now = new Date().getTime();
-      const updatedDevices = fetchedDevices.map(device => {
+    
+    const now = new Date().getTime();
+    const processDevices = (devs: Device[]) => {
+      return devs.map((device: Device) => {
         let isStale = false;
         if (device.status === "online" && device.lastSeen?.toDate) {
           const lastSeenTime = device.lastSeen.toDate().getTime();
-          // If it's been more than 2 minutes (120,000 ms) since last heartbeat, it's a dirty disconnect
           if (now - lastSeenTime > 120000) {
             isStale = true;
           }
         }
-        return {
-          ...device,
-          status: isStale ? "offline" : device.status
-        };
+        return { ...device, status: isStale ? "offline" : device.status };
       });
+    };
+
+    const unsubOwner = subscribeToDevicesByOwner(userId, (owned) => {
+      const processedOwned = processDevices(owned);
       
-      setDevices(updatedDevices);
-      setLoading(false);
+      const unsubShared = subscribeToSharedDevices(userId, (shared) => {
+        const processedShared = processDevices(shared);
+        setDevices([...processedOwned, ...processedShared]);
+        setLoading(false);
+        unsubShared();
+      });
     });
 
-    return () => unsubscribe();
-  }, [ownerId]);
+    return () => {
+      unsubOwner();
+    };
+  }, [userId, refreshKey]);
 
   const totalDevices = devices.length;
   const onlineDevices = devices.filter(d => d.status === "online").length;
@@ -48,6 +59,7 @@ export const useDevices = (ownerId: string | undefined) => {
     onlineDevices,
     offlineDevices,
     loading,
-    error
+    error,
+    refresh
   };
 };

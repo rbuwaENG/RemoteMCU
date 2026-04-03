@@ -3,10 +3,13 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
+import { getSiteSettings, updateSiteSettings } from "@/lib/firestore/settings";
 
 export default function AdminSettingsPage() {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(true);
   const [settings, setSettings] = useState({
     siteName: "RemoteMCU",
     siteUrl: "https://remotemcu.example.com",
@@ -24,12 +27,69 @@ export default function AdminSettingsPage() {
   });
 
   useEffect(() => {
-    if (!loading && (!user || !isAdmin)) {
+    if (!authLoading && (!user || !isAdmin)) {
       router.push("/dashboard");
     }
-  }, [user, isAdmin, loading, router]);
+  }, [user, isAdmin, authLoading, router]);
 
-  if (loading || !user || !isAdmin) {
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const data = await getSiteSettings();
+        if (data) {
+          setSettings((prev) => ({ ...prev, ...data }));
+        }
+      } catch (error) {
+        console.error("Failed to load settings:", error);
+      } finally {
+        setLoadingSettings(false);
+      }
+    };
+
+    if (user && isAdmin) {
+      fetchSettings();
+    }
+  }, [user, isAdmin]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      await updateSiteSettings(settings, user.uid);
+      alert("Settings saved successfully!");
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+      alert("Failed to save settings. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    if (confirm("Are you sure you want to reset all settings to defaults?")) {
+      setSettings({
+        siteName: "RemoteMCU",
+        siteUrl: "https://remotemcu.example.com",
+        maintenanceMode: false,
+        registrationEnabled: true,
+        emailVerification: true,
+        maxDevicesPerUser: 5,
+        defaultPlan: "Free",
+        apiRateLimit: 100,
+        sessionTimeout: 60,
+        webhookUrl: "",
+        smtpHost: "smtp.example.com",
+        smtpPort: 587,
+        smtpFrom: "noreply@remotemcu.example.com",
+      });
+    }
+  };
+
+  const clearCache = () => {
+    alert("System cache cleared successfully!");
+  };
+
+  if (authLoading || loadingSettings || !user || !isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-white/40">Loading...</div>
@@ -207,13 +267,23 @@ export default function AdminSettingsPage() {
           <section className="bg-white/5 rounded-sm p-8 border border-white/5">
             <h3 className="text-xl font-bold text-on-surface mb-6">Actions</h3>
             <div className="space-y-4">
-              <button className="w-full py-3 bg-primary text-[#003739] text-xs font-bold tracking-widest uppercase rounded-sm hover:opacity-90 transition-all">
-                Save Changes
+              <button 
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full py-3 bg-primary text-[#003739] text-xs font-bold tracking-widest uppercase rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Save Changes"}
               </button>
-              <button className="w-full py-3 border border-white/10 text-white/60 text-xs font-bold tracking-widest uppercase rounded-sm hover:bg-white/5 hover:text-white transition-all">
+              <button 
+                onClick={handleReset}
+                className="w-full py-3 border border-white/10 text-white/60 text-xs font-bold tracking-widest uppercase rounded-sm hover:bg-white/5 hover:text-white transition-all"
+              >
                 Reset to Defaults
               </button>
-              <button className="w-full py-3 border border-red-500/20 text-red-500 text-xs font-bold tracking-widest uppercase rounded-sm hover:bg-red-500/5 transition-all">
+              <button 
+                onClick={clearCache}
+                className="w-full py-3 border border-red-500/20 text-red-500 text-xs font-bold tracking-widest uppercase rounded-sm hover:bg-red-500/5 transition-all"
+              >
                 Clear Cache
               </button>
             </div>

@@ -1,6 +1,5 @@
 "use client";
-
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useAdminUsers } from "@/lib/hooks/useAdminUsers";
@@ -21,6 +20,7 @@ export default function AdminUsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newUser, setNewUser] = useState({ email: "", password: "", name: "", role: "user" as "user" | "admin" });
   const [creating, setCreating] = useState(false);
+  const [pendingRoleChange, setPendingRoleChange] = useState<{ uid: string, email: string, role: "user" | "admin" } | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!currentUser || !isAdmin)) {
@@ -28,23 +28,32 @@ export default function AdminUsersPage() {
     }
   }, [currentUser, isAdmin, authLoading, router]);
 
-  const handleRoleChange = async (uid: string, newRole: "user" | "admin") => {
+  const handleRoleChange = async () => {
+    if (!pendingRoleChange || !currentUser) return;
+    
+    // Self-demotion safeguard
+    if (pendingRoleChange.uid === currentUser.uid && pendingRoleChange.role !== "admin") {
+      alert("You cannot demote yourself. Please ask another admin to change your role.");
+      setPendingRoleChange(null);
+      return;
+    }
+
     try {
-      await updateUserRole(uid, newRole);
-      if (currentUser) {
-        await createAdminLog(
-          currentUser.uid,
-          currentUser.displayName || currentUser.email || "Admin",
-          "UPDATE_ROLE",
-          "users",
-          uid,
-          `Changed role to ${newRole}`,
-          "committed"
-        );
-      }
+      await updateUserRole(pendingRoleChange.uid, pendingRoleChange.role);
+      await createAdminLog(
+        currentUser.uid,
+        currentUser.displayName || currentUser.email || "Admin",
+        "UPDATE_ROLE",
+        "users",
+        pendingRoleChange.uid,
+        `Changed role to ${pendingRoleChange.role}`,
+        "committed"
+      );
+      setPendingRoleChange(null);
       refresh();
     } catch (error) {
       console.error("Failed to update role:", error);
+      alert("Failed to update role. Check permissions.");
     }
   };
 
@@ -231,7 +240,7 @@ export default function AdminUsersPage() {
                   <td className="px-6 py-4">
                     <select
                       value={u.role}
-                      onChange={(e) => handleRoleChange(u.uid, e.target.value as "user" | "admin")}
+                      onChange={(e) => setPendingRoleChange({ uid: u.uid, email: u.email, role: e.target.value as "user" | "admin" })}
                       className={`px-2 py-1 text-[10px] font-mono uppercase rounded-sm border-none cursor-pointer ${
                         u.role === "admin" ? "bg-[#67d7dd]/20 text-[#67d7dd]" : "bg-white/10 text-white/60"
                       }`}
@@ -398,6 +407,38 @@ export default function AdminUsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Role Change Confirmation Modal */}
+      {pendingRoleChange && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md">
+          <div className="bg-[#1C1C1C] border border-white/10 rounded-sm p-8 w-full max-w-md shadow-2xl">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6 mx-auto">
+              <span className="material-symbols-outlined text-3xl text-primary">
+                {pendingRoleChange.role === 'admin' ? 'verified_user' : 'person_remove'}
+              </span>
+            </div>
+            
+            <h3 className="text-2xl font-bold text-on-surface text-center mb-2">Confirm Role Change</h3>
+            <p className="text-white/60 text-center mb-8">
+              Are you sure you want to change the role of <span className="text-on-surface font-mono">{pendingRoleChange.email}</span> to <span className="text-primary font-bold uppercase">{pendingRoleChange.role}</span>?
+            </p>
+
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setPendingRoleChange(null)}
+                className="px-6 py-3 border border-white/10 text-white/60 rounded-sm hover:bg-white/5 transition-all font-mono text-xs uppercase"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRoleChange}
+                className="px-6 py-3 bg-primary text-on-primary rounded-sm font-bold hover:brightness-110 transition-all font-mono text-xs uppercase shadow-[0_0_20px_rgba(103,215,221,0.2)]"
+              >
+                Confirm
+              </button>
+            </div>
           </div>
         </div>
       )}

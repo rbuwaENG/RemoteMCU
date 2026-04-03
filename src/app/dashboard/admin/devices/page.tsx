@@ -28,7 +28,21 @@ export default function AdminDevicesPage() {
     const fetchDevices = async () => {
       try {
         const allDevices = await getAllDevices();
-        setDevices(allDevices);
+        const now = new Date().getTime();
+        const updatedDevices = allDevices.map(device => {
+          let isStale = false;
+          if (device.status === "online" && device.lastSeen?.toDate) {
+            const lastSeenTime = device.lastSeen.toDate().getTime();
+            if (now - lastSeenTime > 120000) {
+              isStale = true;
+            }
+          }
+          return {
+            ...device,
+            status: isStale ? "offline" : device.status
+          };
+        });
+        setDevices(updatedDevices);
       } catch (error) {
         console.error("Failed to fetch devices:", error);
       } finally {

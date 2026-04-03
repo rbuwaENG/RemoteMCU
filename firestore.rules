@@ -3,140 +3,106 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ============ USERS COLLECTION ============
-    // Users can read/write their own profile, admins can read all
-    match /users/{userId} {
-      // Owner can read and write their own profile
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      // Admins can read all user profiles
-      allow read: if request.auth != null && 
+    function isAdmin() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
+    // ============ USERS COLLECTION ============
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAdmin();
+    }
+    
     // ============ DEVICES COLLECTION ============
-    // Users can read/write their own devices, shared users can read
     match /devices/{deviceId} {
-      // Allow any authenticated user to create
       allow create: if request.auth != null;
-      
-      // Allow read access broadly for development
       allow read: if request.auth != null;
-      
-      // Owner can write/delete their devices
-      allow write, delete: if request.auth != null && 
-        resource.data.ownerId == request.auth.uid;
-      
-      // Allow update if claiming unowned device
-      allow update: if request.auth != null && 
-        (resource.data.ownerId == null || resource.data.ownerId == request.auth.uid);
+      allow write: if request.auth != null;
+      allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
     }
     
     // ============ SHARE KEYS COLLECTION ============
     match /shareKeys/{shareKeyId} {
-      // Only device owners can create/revoke share keys
       allow create: if request.auth != null;
       allow read: if request.auth != null;
-      allow update, delete: if request.auth != null && 
-        resource.data.ownerId == request.auth.uid;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
     }
     
     // ============ PLANS COLLECTION ============
     match /plans/{planId} {
-      // Everyone can read plans (for display in pricing)
       allow read: if true;
-      // Only admins can write plans
-      allow write: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if isAdmin();
     }
     
     // ============ SITE CONTENT ============
     match /siteContent/{contentId} {
-      // Everyone can read site content (landing page, about, etc.)
       allow read: if true;
-      // Only admins can write site content
-      allow write: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if isAdmin();
     }
     
     // ============ PROMO CODES ============
     match /promoCodes/{promoId} {
-      // Admins can read all promo codes
-      allow read: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      // Only admins can write promo codes
-      allow write: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
     
     // ============ STATS COLLECTION ============
     match /stats/{statId} {
-      // Only admins can read/write stats
-      allow read, write: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow read, write: if isAdmin();
+    }
+    
+    match /hourlyStats/{statId} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /monthlyStats/{statId} {
+      allow read, write: if isAdmin();
     }
     
     // ============ ADMIN LOGS ============
     match /adminLogs/{logId} {
-      // Only admins can read/write admin logs
-      allow read, write: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow read, write: if isAdmin();
     }
     
-    // ============ PENDING DEVICES (for onboarding) ============
+    // ============ PENDING DEVICES ============
     match /pendingDevices/{pendingId} {
-      // Allow anyone to create (host agent without auth)
       allow create: if true;
-      // Device owner can read/write their pending device
-      allow read, write: if request.auth != null && 
-        resource.data.ownerId == request.auth.uid;
+      allow read, write: if request.auth != null && resource.data.ownerId == request.auth.uid;
     }
     
-    // ============ DOCUMENTATION COLLECTION ============
+    // ============ DOCUMENTATION ============
     match /documentation/{docId} {
-      // Everyone can read documentation
       allow read: if true;
-      // Only admins can write documentation
-      allow write: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if isAdmin();
     }
     
     // ============ SUPPORT TICKETS ============
     match /supportTickets/{ticketId} {
-      // Users can create tickets
       allow create: if request.auth != null;
-      // Users can read their own tickets
-      allow read: if request.auth != null && 
-        (resource.data.userId == request.auth.uid || 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-      // Users can update their own tickets, admins can update all
-      allow update: if request.auth != null && 
-        (resource.data.userId == request.auth.uid || 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
     }
     
     // ============ CREDIT TRANSACTIONS ============
     match /creditTransactions/{transactionId} {
-      // Users can read their own transactions, admins can read all
-      allow read: if request.auth != null && 
-        (resource.data.userId == request.auth.uid || 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-      // Only system can create transactions (via Cloud Functions)
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if false;
-      allow update, delete: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow update, delete: if isAdmin();
     }
-    // ============ COMPILE JOBS (Phase 12) ============
-    // Created by the browser, updated only by the host-agent via REST.
+    
+    // ============ COMPILE JOBS ============
     match /compileJobs/{jobId} {
-      // Only the owner can create a compile job
-      allow create: if request.auth != null
-        && request.resource.data.ownerId == request.auth.uid;
-      // Owner and admins can read job status/results
-      allow read: if request.auth != null &&
-        (resource.data.ownerId == request.auth.uid ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-      // No client-side updates — only the host-agent writes via REST (service account)
+      allow create: if request.auth != null && request.resource.data.ownerId == request.auth.uid;
+      allow read: if request.auth != null && (resource.data.ownerId == request.auth.uid || isAdmin());
       allow update, delete: if false;
+    }
+
+    // ============ SETTINGS COLLECTION ============
+    match /settings/{settingId} {
+      allow read, write: if isAdmin();
     }
   }
 }

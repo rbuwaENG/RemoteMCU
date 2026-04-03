@@ -4,7 +4,7 @@ import "@/styles/globals.css";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { subscribeToDevice, Device, updateDevice, sendSerialCommand } from "@/lib/firestore/devices";
+import { subscribeToDevice, Device, updateDevice, sendSerialCommand, addActiveSession, removeActiveSession, getDevice } from "@/lib/firestore/devices";
 import Editor, { OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import { createCompileJob, JOB_STATUS_LABELS, isJobInProgress } from "@/lib/firestore/compileJobs";
@@ -89,6 +89,55 @@ void loop() {
     
     return () => unsubscribe();
   }, [deviceId]);
+
+  useEffect(() => {
+    if (!deviceId || !user) return;
+    
+    const registerSession = async () => {
+      const device = await getDevice(deviceId);
+      console.log("Device session duration:", device?.sessionDurationMinutes);
+      console.log("Device sharedWith:", device?.sharedWith);
+      
+      const durationMinutes = device?.sessionDurationMinutes;
+      let expiresAt: Date | undefined;
+      
+      if (durationMinutes && durationMinutes > 0) {
+        expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + durationMinutes);
+        console.log("Session will expire at:", expiresAt);
+      }
+      
+      await addActiveSession(deviceId, {
+        userId: user.uid,
+        displayName: user.displayName || "User",
+        email: user.email || "",
+        connectedAt: new Date(),
+        expiresAt
+      });
+      console.log("Session registered with expiresAt:", expiresAt);
+    };
+    
+    registerSession();
+    
+    const checkSessionExpiry = setInterval(() => {
+      getDevice(deviceId).then(device => {
+        const session = device?.activeSessions?.find(s => s.userId === user.uid);
+        if (session?.expiresAt) {
+          const expiryDate = session.expiresAt.toDate ? session.expiresAt.toDate() : new Date(session.expiresAt.seconds * 1000);
+          if (expiryDate < new Date()) {
+            removeActiveSession(deviceId, user.uid);
+            alert("Your session has expired. You have been disconnected.");
+            router.push("/dashboard/devices");
+          }
+        }
+      }).catch(console.error);
+    }, 30000);
+    
+    return () => {
+      removeActiveSession(deviceId, user.uid);
+      clearInterval(checkSessionExpiry);
+    };
+  }, [deviceId, user]);
 
   useEffect(() => {
     if (showBootScreen) {

@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useDevices } from "@/lib/hooks/useDevices";
-import { deleteDevice, updateDevice, Device } from "@/lib/firestore/devices";
+import { deleteDevice, updateDevice, Device, removeActiveSession, setSessionDuration as updateSessionDuration, removeSharedUser, cleanExpiredSessions, leaveSharedDevice } from "@/lib/firestore/devices";
 import { createShareKey } from "@/lib/firestore/shareKeys";
+import { getUserProfiles, UserProfile } from "@/lib/firestore/users";
 import LinkDeviceModal from "@/components/devices/LinkDeviceModal";
 
 export default function DevicesPage() {
   const { user } = useAuth();
-  const { devices, totalDevices, onlineDevices, offlineDevices, loading } = useDevices(user?.uid);
+  const { devices, totalDevices, onlineDevices, offlineDevices, loading, refresh } = useDevices(user?.uid);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -20,6 +21,46 @@ export default function DevicesPage() {
   const [deviceName, setDeviceName] = useState("");
   const [deviceShareKey, setDeviceShareKey] = useState<string | null>(null);
   const [generatingKey, setGeneratingKey] = useState(false);
+  const [activeSessions, setActiveSessions] = useState<Device['activeSessions']>([]);
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [sessionDuration, setSessionDuration] = useState<number>(60);
+  const [sharedUserProfiles, setSharedUserProfiles] = useState<Map<string, UserProfile>>(new Map());
+  const [progressKey, setProgressKey] = useState(0);
+
+  useEffect(() => {
+    if (selectedDevice) {
+      setSessionDuration(selectedDevice.sessionDurationMinutes || 0);
+    }
+  }, [selectedDevice]);
+
+  useEffect(() => {
+    if (activeMenu && devices.length > 0) {
+      const device = devices.find(d => d.id === activeMenu);
+      if (device?.sharedWith && device.sharedWith.length > 0) {
+        getUserProfiles(device.sharedWith).then(profiles => {
+          setSharedUserProfiles(profiles);
+        });
+      } else {
+        setSharedUserProfiles(new Map());
+      }
+    }
+  }, [activeMenu, devices]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setProgressKey(k => k + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      devices.forEach(device => {
+        cleanExpiredSessions(device.id).catch(console.error);
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [devices]);
 
   const handleDeleteDevice = async () => {
     if (!selectedDevice) return;
@@ -36,15 +77,16 @@ export default function DevicesPage() {
     setSelectedDevice(device);
     setDeviceName(device.name);
     setDeviceShareKey(null);
+    setActiveSessions(device.activeSessions || []);
+    setSessionDuration(device.sessionDurationMinutes || 60);
     setShowSettingsModal(true);
   };
 
   const generateShareKey = async () => {
     if (!selectedDevice || !user) return;
-    
     setGeneratingKey(true);
     try {
-      const key = await createShareKey(selectedDevice.id, user.uid, 168); // 7 days
+      const key = await createShareKey(selectedDevice.id, user.uid, 168);
       setDeviceShareKey(key);
     } catch (error) {
       console.error("Failed to generate share key:", error);
@@ -55,8 +97,13 @@ export default function DevicesPage() {
   const handleSaveSettings = async () => {
     if (!selectedDevice) return;
     try {
-      const { updateDevice } = await import("@/lib/firestore/devices");
+      console.log("Saving device:", selectedDevice.id, "sessionDuration:", sessionDuration);
       await updateDevice(selectedDevice.id, { name: deviceName });
+      await updateSessionDuration(selectedDevice.id, sessionDuration);
+      
+      const verify = await import("@/lib/firestore/devices").then(m => m.getDevice(selectedDevice.id));
+      console.log("Verified sessionDuration after save:", verify?.sessionDurationMinutes);
+      
       alert("Device settings saved!");
       setShowSettingsModal(false);
     } catch (error) {
@@ -64,9 +111,40 @@ export default function DevicesPage() {
     }
   };
 
+  const handleRevokeSession = async (deviceId: string, userId: string) => {
+    if (!deviceId) return;
+    try {
+      await removeActiveSession(deviceId, userId);
+      setActiveMenu(null);
+      refresh();
+    } catch (error) {
+      console.error("Failed to revoke session:", error);
+    }
+  };
+
+  const handleRemoveSharedUser = async (deviceId: string, userId: string) => {
+    if (!deviceId) return;
+    try {
+      await removeSharedUser(deviceId, userId);
+      setActiveMenu(null);
+      refresh();
+    } catch (error) {
+      console.error("Failed to remove shared user:", error);
+    }
+  };
+
   const handleDeviceLinked = (deviceName: string) => {
     console.log("Device linked:", deviceName);
   };
+
+  const handleDeviceLinkedWithRefresh = (deviceName: string) => {
+    console.log("Device linked:", deviceName);
+    setTimeout(() => {
+      refresh();
+    }, 1500);
+  };
+
+  const isSharedDevice = (device: Device) => device.ownerId !== user?.uid;
 
   const formatLastSeen = (lastSeen: any) => {
     if (!lastSeen) return "Never";
@@ -84,15 +162,6 @@ export default function DevicesPage() {
     return "Unknown";
   };
 
-  const boards = [
-    { value: "ESP32", label: "ESP32" },
-    { value: "ESP8266", label: "ESP8266" },
-    { value: "Arduino Uno", label: "Arduino Uno" },
-    { value: "Arduino Nano", label: "Arduino Nano" },
-    { value: "STM32", label: "STM32" },
-    { value: "Raspberry Pi Pico", label: "Raspberry Pi Pico" },
-  ];
-
   const issuesCount = devices.filter(d => d.status === "error").length;
 
   const filteredDevices = devices.filter(device => {
@@ -106,7 +175,6 @@ export default function DevicesPage() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-[#F0F0F0] mb-2">My Devices</h1>
@@ -121,7 +189,6 @@ export default function DevicesPage() {
         </button>
       </div>
 
-      {/* Search & Filter */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
         <div className="relative w-full max-w-md">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
@@ -145,13 +212,9 @@ export default function DevicesPage() {
             <option>Arduino</option>
             <option>STM32</option>
           </select>
-          <button className="p-2 bg-surface-container-high rounded-sm text-on-surface-variant hover:text-primary transition-colors">
-            <span className="material-symbols-outlined text-sm">filter_list</span>
-          </button>
         </div>
       </div>
 
-      {/* Devices Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredDevices.map((device) => (
           <div 
@@ -160,34 +223,241 @@ export default function DevicesPage() {
           >
             <div className="p-5 flex-1">
               <div className="flex justify-between items-start mb-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`w-2 h-2 rounded-full ${device.status === 'online' ? 'bg-[#4CAF50] shadow-[0_0_8px_#4CAF50]' : 'bg-[#F44336] shadow-[0_0_8px_#F44336]'}`}></span>
-                    <h3 className="font-mono text-sm font-bold tracking-tight text-[#F0F0F0]">{device.name}</h3>
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="relative flex items-center justify-center">
+                    <span className={`w-2.5 h-2.5 rounded-full status-dot ${
+                      device.status === 'online' ? 'status-dot-online' : 
+                      device.status === 'error' ? 'status-dot-error' : 
+                      'status-dot-offline'
+                    }`}></span>
                   </div>
-                  <span className={`inline-block px-2 py-0.5 rounded-sm ${device.status === 'offline' ? 'bg-surface-variant text-on-surface-variant' : 'bg-primary/10 text-primary'} text-[10px] font-bold tracking-wider uppercase`}>
-                    {device.board}
-                  </span>
+                  <div>
+                    <h3 className="font-mono text-sm font-bold tracking-tight text-[#F0F0F0] leading-none mb-1">{device.name}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isSharedDevice(device) && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
+                          Shared
+                        </span>
+                      )}
+                      {!isSharedDevice(device) && device.sharedWith && device.sharedWith.length > 0 && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">
+                          {device.sharedWith.length} sharing
+                        </span>
+                      )}
+                      <span className={`text-[9px] font-bold uppercase tracking-wider ${
+                        device.status === 'online' ? 'text-success' : 'text-on-surface-variant'
+                      }`}>
+                        {device.status}
+                      </span>
+                      <span className="w-1 h-1 rounded-full bg-white/10"></span>
+                      <span className="text-[9px] text-on-surface-variant/60 font-mono uppercase">
+                        {device.board}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <button className="text-on-surface-variant hover:text-white transition-colors">
-                  <span className="material-symbols-outlined text-lg">more_vert</span>
-                </button>
+                <div className="relative">
+                  <button 
+                    className="text-on-surface-variant hover:text-white transition-colors"
+                    onClick={() => setActiveMenu(activeMenu === device.id ? null : device.id)}
+                  >
+                    <span className="material-symbols-outlined text-lg">more_vert</span>
+                  </button>
+                  {activeMenu === device.id && isSharedDevice(device) && (
+                    <div className="absolute right-0 top-8 w-64 bg-[#1E1E1E] border border-[#3C3C3C] rounded-lg shadow-xl z-50 overflow-hidden">
+                      <div className="p-3">
+                        <p className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider mb-2">Session Status</p>
+                        <div className="bg-surface-container-high rounded-lg p-3">
+                          {(() => {
+                            const sessionMins = device.sessionDurationMinutes;
+                            const sharedAccess = device.sharedAccess as Record<string, { sharedAt?: any; expiresAt?: any } | undefined>;
+                            const myAccess = user?.uid ? sharedAccess?.[user.uid] : undefined;
+                            const expiresAt = myAccess?.expiresAt;
+                            
+                            if (sessionMins && sessionMins > 0) {
+                              if (expiresAt) {
+                                let expiryDate: Date;
+                                if (expiresAt.toDate) {
+                                  expiryDate = expiresAt.toDate();
+                                } else if (expiresAt.seconds) {
+                                  expiryDate = new Date(expiresAt.seconds * 1000);
+                                } else {
+                                  expiryDate = new Date(expiresAt);
+                                }
+                                const now = new Date();
+                                const totalMs = sessionMins * 60 * 1000;
+                                const remainingMs = Math.max(0, expiryDate.getTime() - now.getTime());
+                                const progress = Math.min(100, (remainingMs / totalMs) * 100);
+                                
+                                const hours = Math.floor(remainingMs / 3600000);
+                                const mins = Math.floor((remainingMs % 3600000) / 60000);
+                                const secs = Math.floor((remainingMs % 60000) / 1000);
+                                let timeText = "";
+                                if (hours > 0) timeText = `${hours}h ${mins}m`;
+                                else if (mins > 0) timeText = `${mins}m ${secs}s`;
+                                else timeText = `${secs}s left`;
+                                
+                                return (
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-[9px] text-on-surface-variant">{timeText}</span>
+                                    </div>
+                                    <div className="w-full h-2 bg-surface-container-lowest rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full rounded-full transition-all ${progress > 50 ? 'bg-green-500' : progress > 20 ? 'bg-orange-500' : 'bg-error'}`} 
+                                        style={{ width: `${progress}%` }}
+                                      ></div>
+                                    </div>
+                                    <div className="flex justify-between items-center pt-1">
+                                      <span className="text-[8px] text-on-surface-variant/60">{sessionMins} min session</span>
+                                        <button
+                                        onClick={async () => {
+                                          await leaveSharedDevice(device.id, user!.uid);
+                                          setActiveMenu(null);
+                                          setTimeout(() => refresh(), 500);
+                                        }}
+                                        className="text-[8px] px-2 py-1 rounded bg-error/10 text-error hover:bg-error/20"
+                                      >
+                                        Revoke
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              
+                              return (
+                                <div className="flex justify-between items-center">
+                                  <p className="text-[9px] text-on-surface-variant">
+                                    {sessionMins} min limit set
+                                  </p>
+                                  <button
+                                    onClick={async () => {
+                                      await leaveSharedDevice(device.id, user!.uid);
+                                      setActiveMenu(null);
+                                      setTimeout(() => refresh(), 500);
+                                    }}
+                                    className="text-[8px] px-2 py-1 rounded bg-error/10 text-error hover:bg-error/20"
+                                  >
+                                    Leave
+                                  </button>
+                                </div>
+                            );
+                          }
+                          
+                          return (
+                            <div className="flex justify-between items-center">
+                              <p className="text-[9px] text-on-surface-variant">No time limit</p>
+                              <button
+                                onClick={async () => {
+                                  await leaveSharedDevice(device.id, user!.uid);
+                                  setActiveMenu(null);
+                                  setTimeout(() => refresh(), 500);
+                                }}
+                                className="text-[8px] px-2 py-1 rounded bg-error/10 text-error hover:bg-error/20"
+                              >
+                                Leave
+                              </button>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {activeMenu === device.id && !isSharedDevice(device) && (
+                    <div className="absolute right-0 top-8 w-64 bg-[#1E1E1E] border border-[#3C3C3C] rounded-lg shadow-xl z-50 overflow-hidden">
+                      {(device.activeSessions && device.activeSessions.length > 0) && (
+                        <div className="p-3 border-b border-[#3C3C3C]">
+                          <p className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider mb-2">Active Now</p>
+                          <div className="space-y-2 max-h-24 overflow-y-auto">
+                            {device.activeSessions.map((session) => (
+                              <div key={session.userId} className="flex items-center justify-between bg-surface-container-high rounded p-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center text-[8px] font-bold text-green-400 flex-shrink-0">
+                                    {session.displayName?.charAt(0).toUpperCase() || session.email?.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] text-[#F0F0F0] truncate">{session.displayName || "User"}</p>
+                                    <p className="text-[8px] text-on-surface-variant truncate">{session.email}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleRevokeSession(device.id, session.userId)}
+                                  className="text-[8px] px-1.5 py-0.5 rounded bg-error/10 text-error hover:bg-error/20 flex-shrink-0"
+                                >
+                                  Revoke
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {(device.sharedWith && device.sharedWith.length > 0) && (
+                        <div className="p-3 border-b border-[#3C3C3C]">
+                          <p className="text-[10px] font-mono text-on-surface-variant uppercase tracking-wider mb-2">Shared Access</p>
+                          <div className="space-y-2 max-h-24 overflow-y-auto">
+                            {device.sharedWith.map((userId, idx) => {
+                              const profile = sharedUserProfiles.get(userId);
+                              return (
+                                <div key={idx} className="flex items-center justify-between bg-surface-container-high rounded p-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center text-[8px] font-bold text-purple-400">
+                                      {profile?.displayName?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase() || "?"}
+                                    </div>
+                                    <p className="text-[10px] text-on-surface-variant truncate max-w-[120px]">
+                                      {profile?.email || profile?.displayName || `User ${userId.slice(0, 6)}...`}
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => handleRemoveSharedUser(device.id, userId)}
+                                    className="text-[8px] px-1.5 py-0.5 rounded bg-error/10 text-error hover:bg-error/20"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {((!device.activeSessions || device.activeSessions.length === 0) && (!device.sharedWith || device.sharedWith.length === 0)) && (
+                        <div className="p-3">
+                          <p className="text-[9px] text-on-surface-variant">No active sessions or shared users</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="space-y-3 py-4">
                 <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-[#A0A0A0] font-mono">Last Heartbeat</span>
+                  <div className="flex items-center gap-1.5 text-[#A0A0A0] font-mono">
+                    <span className="material-symbols-outlined text-[12px]">schedule</span>
+                    <span>Last Heartbeat</span>
+                  </div>
                   <span className={`font-mono ${device.status === 'offline' ? 'text-on-surface-variant' : 'text-on-surface'}`}>{formatLastSeen(device.lastSeen)}</span>
                 </div>
                 <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-[#A0A0A0] font-mono">IP Address</span>
+                  <div className="flex items-center gap-1.5 text-[#A0A0A0] font-mono">
+                    <span className="material-symbols-outlined text-[12px]">language</span>
+                    <span>IP Address</span>
+                  </div>
                   <span className={`font-mono ${device.status === 'offline' ? 'text-on-surface-variant' : 'text-on-surface'}`}>{device.ip || "None"}</span>
                 </div>
               </div>
-              <div className="mt-2 h-12 w-full bg-surface-container-lowest rounded overflow-hidden flex items-center justify-center">
+              <div className="mt-4 h-14 w-full bg-surface-container-lowest rounded-lg overflow-hidden flex flex-col items-center justify-center border border-white/5 relative">
                 {device.status === 'offline' ? (
-                  <span className="text-[10px] font-mono text-error uppercase tracking-tighter">Connection Lost</span>
+                  <>
+                    <div className="absolute inset-0 bg-error/5 animate-pulse"></div>
+                    <span className="material-symbols-outlined text-error text-lg mb-0.5 relative z-10">cloud_off</span>
+                    <span className="text-[9px] font-mono text-error/60 uppercase tracking-widest relative z-10">Link Interrupted</span>
+                  </>
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-r from-primary/20 to-transparent animate-pulse"></div>
+                  <>
+                    <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-primary/10 to-transparent animate-[pulse_3s_infinite]"></div>
+                    <span className="material-symbols-outlined text-primary text-lg mb-0.5 relative z-10">sensors</span>
+                    <span className="text-[9px] font-mono text-primary/60 uppercase tracking-widest relative z-10">Stream Active</span>
+                  </>
                 )}
               </div>
             </div>
@@ -222,7 +492,6 @@ export default function DevicesPage() {
           </div>
         ))}
 
-        {/* Add Device Card */}
         <Link 
           href="/dashboard/devices/onboard"
           className="border-2 border-dashed border-[#3C3C3C] rounded-xl flex flex-col items-center justify-center p-8 bg-surface-container-low/30 hover:bg-surface-container-low/50 transition-all cursor-pointer group"
@@ -235,7 +504,6 @@ export default function DevicesPage() {
         </Link>
       </div>
 
-      {/* System Stats Footer */}
       <div className="mt-16 grid grid-cols-12 gap-8 items-end">
         <div className="col-span-12 lg:col-span-8">
           <div className="flex items-center gap-4 mb-4">
@@ -274,35 +542,19 @@ export default function DevicesPage() {
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
       {showDeleteModal && selectedDevice && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm px-4" onClick={() => setShowDeleteModal(false)}>
           <div className="w-full max-w-md bg-[#2D2D2D] border border-[#3C3C3C] rounded-xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="p-6">
-              {/* Header */}
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center">
                   <span className="material-symbols-outlined text-error">delete_forever</span>
                 </div>
                 <h2 className="text-[18px] font-bold text-error">Delete Device?</h2>
               </div>
-              {/* Message */}
               <p className="text-[14px] leading-relaxed text-[#A0A0A0] mb-8">
                 This action is permanent and cannot be undone. All data and configuration for this device will be erased.
               </p>
-              {/* Confirmation Input */}
-              <div className="space-y-2 mb-8">
-                <label className="block text-[12px] uppercase tracking-wider font-mono text-[#A0A0A0]">Type the device name to confirm</label>
-                <div className="relative group">
-                  <input
-                    className="w-full bg-[#1E1E1E] border border-[#3C3C3C] rounded-lg px-4 py-3 text-[#F0F0F0] font-mono text-sm focus:outline-none focus:border-error transition-colors"
-                    type="text"
-                    value={selectedDevice.name}
-                    readOnly
-                  />
-                </div>
-              </div>
-              {/* Actions */}
               <div className="flex gap-3">
                 <button
                   className="flex-1 px-4 py-2.5 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all text-sm font-semibold"
@@ -318,7 +570,6 @@ export default function DevicesPage() {
                 </button>
               </div>
             </div>
-            {/* Technical Metadata Footer */}
             <div className="px-6 py-3 bg-[#1e1e1e]/50 border-t border-[#3C3C3C]/50 flex justify-between items-center">
               <span className="text-[10px] font-mono text-[#A0A0A0] uppercase">ID: DEV-{selectedDevice.id}</span>
               <span className="text-[10px] font-mono text-[#A0A0A0] uppercase">AUTH: REQ-PROD-DEL</span>
@@ -330,10 +581,9 @@ export default function DevicesPage() {
       <LinkDeviceModal 
         isOpen={showLinkModal} 
         onClose={() => setShowLinkModal(false)}
-        onDeviceLinked={handleDeviceLinked}
+        onDeviceLinked={handleDeviceLinkedWithRefresh}
       />
 
-      {/* Settings Modal */}
       {showSettingsModal && selectedDevice && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm px-4" onClick={() => setShowSettingsModal(false)}>
           <div className="w-full max-w-md bg-[#2D2D2D] border border-[#3C3C3C] rounded-xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -362,17 +612,25 @@ export default function DevicesPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[12px] uppercase tracking-wider font-mono text-[#A0A0A0] mb-2">Device ID</label>
-                  <div className="w-full bg-[#1E1E1E] border border-[#3C3C3C] rounded-lg px-4 py-3 text-[#A0A0A0] font-mono text-sm">
-                    {selectedDevice.id}
-                  </div>
+                  <label className="block text-[12px] uppercase tracking-wider font-mono text-[#A0A0A0] mb-2">Session Time Limit</label>
+                  <p className="text-[10px] text-on-surface-variant mb-2">Set how long users can access this device</p>
+                  <select 
+                    className="w-full bg-[#1E1E1E] border border-[#3C3C3C] rounded-lg px-4 py-3 text-[#F0F0F0] font-mono text-sm focus:outline-none focus:border-primary"
+                    value={sessionDuration}
+                    onChange={(e) => setSessionDuration(Number(e.target.value))}
+                  >
+                    <option value={0}>No limit</option>
+                    <option value={15}>15 minutes</option>
+                    <option value={30}>30 minutes</option>
+                    <option value={60}>1 hour</option>
+                    <option value={120}>2 hours</option>
+                    <option value={480}>8 hours</option>
+                    <option value={1440}>24 hours</option>
+                  </select>
                 </div>
-
-                {/* Share Key Section */}
                 <div className="border-t border-[#3C3C3C] pt-4 mt-4">
                   <label className="block text-[12px] uppercase tracking-wider font-mono text-[#A0A0A0] mb-2">Share Device</label>
                   <p className="text-[10px] text-on-surface-variant mb-3">Generate a key to share this device with others</p>
-                  
                   {deviceShareKey ? (
                     <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -380,7 +638,7 @@ export default function DevicesPage() {
                         <span className="font-mono text-primary font-bold tracking-wider">{deviceShareKey}</span>
                       </div>
                       <button 
-                        onClick={() => { navigator.clipboard.writeText(deviceShareKey); }}
+                        onClick={() => deviceShareKey && navigator.clipboard.writeText(deviceShareKey)}
                         className="text-xs text-on-surface-variant hover:text-primary"
                       >
                         Copy
@@ -398,7 +656,6 @@ export default function DevicesPage() {
                   )}
                 </div>
               </div>
-
               <div className="flex gap-3">
                 <button
                   className="flex-1 px-4 py-2.5 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all text-sm font-semibold"

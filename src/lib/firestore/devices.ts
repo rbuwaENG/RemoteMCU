@@ -29,6 +29,20 @@ export interface Device {
   createdAt: any;
   sharedWith: string[];
   code?: string;
+  activeSessions?: {
+    userId: string;
+    displayName: string;
+    email: string;
+    connectedAt: any;
+    expiresAt?: any;
+  }[];
+  sessionDurationMinutes?: number;
+  sharedAccess?: {
+    [userId: string]: {
+      sharedAt: any;
+      expiresAt?: any;
+    }
+  };
 }
 
 export const getDevice = async (deviceId: string): Promise<Device | null> => {
@@ -89,8 +103,20 @@ export const addSharedUser = async (deviceId: string, userId: string): Promise<v
   if (device) {
     const sharedWith = device.sharedWith || [];
     if (!sharedWith.includes(userId)) {
+      const now = new Date();
+      const expiresAt = device.sessionDurationMinutes && device.sessionDurationMinutes > 0
+        ? new Date(now.getTime() + device.sessionDurationMinutes * 60000)
+        : null;
+      
+      const sharedAccess = device.sharedAccess || {};
+      sharedAccess[userId] = {
+        sharedAt: now,
+        expiresAt: expiresAt
+      };
+      
       await updateDoc(deviceRef, {
-        sharedWith: [...sharedWith, userId]
+        sharedWith: [...sharedWith, userId],
+        sharedAccess: sharedAccess
       });
     }
   }
@@ -132,6 +158,18 @@ export const subscribeToDevicesByOwner = (
   });
 };
 
+export const subscribeToSharedDevices = (
+  userId: string, 
+  callback: (devices: Device[]) => void
+): Unsubscribe => {
+  const devicesRef = collection(db, "devices");
+  const q = query(devicesRef, where("sharedWith", "array-contains", userId));
+  return onSnapshot(q, (snapshot) => {
+    const devices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Device));
+    callback(devices);
+  });
+};
+
 export const subscribeToAllDevices = (
   callback: (devices: Device[]) => void
 ): Unsubscribe => {
@@ -163,4 +201,137 @@ export const sendSerialCommand = async (deviceId: string, command: string): Prom
     lastCommand: command,
     lastCommandAt: serverTimestamp()
   });
+};
+
+export const addActiveSession = async (
+  deviceId: string, 
+  session: {
+    userId: string;
+    displayName: string;
+    email: string;
+    connectedAt: any;
+    expiresAt?: Date;
+  }
+): Promise<void> => {
+  const deviceRef = doc(db, "devices", deviceId);
+  const device = await getDevice(deviceId);
+  const sessions = device?.activeSessions || [];
+  
+  const existingIndex = sessions.findIndex(s => s.userId === session.userId);
+  if (existingIndex >= 0) {
+    sessions[existingIndex] = session;
+  } else {
+    sessions.push(session);
+  }
+  
+  await updateDoc(deviceRef, { activeSessions: sessions });
+};
+
+export const removeActiveSession = async (deviceId: string, userId: string): Promise<void> => {
+  const deviceRef = doc(db, "devices", deviceId);
+  const device = await getDevice(deviceId);
+  const sessions = (device?.activeSessions || []).filter(s => s.userId !== userId);
+  await updateDoc(deviceRef, { activeSessions: sessions });
+};
+
+export const getActiveSessions = async (deviceId: string): Promise<Device['activeSessions']> => {
+  const device = await getDevice(deviceId);
+  return device?.activeSessions || [];
+};
+
+export const clearExpiredSessions = async (deviceId: string): Promise<void> => {
+  const device = await getDevice(deviceId);
+  if (!device?.activeSessions) return;
+  
+  const now = new Date();
+  const validSessions = device.activeSessions.filter(s => {
+    if (s.expiresAt) {
+      const expiry = s.expiresAt.toDate ? s.expiresAt.toDate() : new Date(s.expiresAt.seconds * 1000);
+      return expiry > now;
+    }
+    return true;
+  });
+  
+  if (validSessions.length !== device.activeSessions.length) {
+    const deviceRef = doc(db, "devices", deviceId);
+    await updateDoc(deviceRef, { activeSessions: validSessions });
+  }
+};
+
+export const setSessionDuration = async (deviceId: string, minutes: number): Promise<void> => {
+  const deviceRef = doc(db, "devices", deviceId);
+  await updateDoc(deviceRef, { sessionDurationMinutes: minutes });
+};
+
+export const leaveSharedDevice = async (deviceId: string, userId: string): Promise<void> => {
+  console.log("Leaving device:", deviceId, "user:", userId);
+  const deviceRef = doc(db, "devices", deviceId);
+  const device = await getDevice(deviceId);
+  if (!device) {
+    console.log("Device not found");
+    return;
+  }
+  
+  console.log("Current sharedWith:", device.sharedWith);
+  console.log("Current activeSessions:", device.activeSessions);
+  
+  const newSharedWith = (device.sharedWith || []).filter(id => id !== userId);
+  const newActiveSessions = (device.activeSessions || []).filter(s => s.userId !== userId);
+  
+  const newSharedAccess = { ...(device.sharedAccess || {}) };
+  delete newSharedAccess[userId];
+  
+  console.log("New sharedWith:", newSharedWith);
+  console.log("New activeSessions:", newActiveSessions);
+  
+  await updateDoc(deviceRef, {
+    sharedWith: newSharedWith,
+    activeSessions: newActiveSessions,
+    sharedAccess: newSharedAccess
+  });
+  console.log("Successfully left device");
+};
+
+export const cleanExpiredSessions = async (deviceId: string): Promise<void> => {
+  const device = await getDevice(deviceId);
+  if (!device) return;
+  
+  const now = new Date();
+  const validSessions: Device['activeSessions'] = [];
+  const expiredUserIds: string[] = [];
+  
+  if (device.activeSessions) {
+    for (const session of device.activeSessions) {
+      let isExpired = false;
+      if (session.expiresAt) {
+        try {
+          const expiryDate = session.expiresAt.toDate ? session.expiresAt.toDate() : new Date(session.expiresAt.seconds * 1000);
+          if (expiryDate < now) {
+            isExpired = true;
+            expiredUserIds.push(session.userId);
+          }
+        } catch (e) {
+          console.error("Error checking expiry:", e);
+        }
+      }
+      if (!isExpired) {
+        validSessions.push(session);
+      }
+    }
+  }
+  
+  let updatedSharedWith = device.sharedWith || [];
+  
+  if (expiredUserIds.length > 0 && device.sessionDurationMinutes && device.sessionDurationMinutes > 0) {
+    updatedSharedWith = updatedSharedWith.filter(uid => !expiredUserIds.includes(uid));
+  }
+  
+  if (validSessions.length !== (device.activeSessions?.length || 0) || 
+      updatedSharedWith.length !== (device.sharedWith?.length || 0)) {
+    const deviceRef = doc(db, "devices", deviceId);
+    await updateDoc(deviceRef, { 
+      activeSessions: validSessions,
+      sharedWith: updatedSharedWith
+    });
+  }
 };

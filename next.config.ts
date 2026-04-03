@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  serverExternalPackages: ["firebase"],
+  transpilePackages: ["mqtt", "broker-factory"]
+};
 
 export default nextConfig;

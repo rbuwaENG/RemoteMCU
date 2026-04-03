@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -34,8 +33,7 @@ export default function PaymentPage() {
   };
 
   return (
-    <DashboardLayout>
-      <div className="max-w-6xl mx-auto px-10 py-12">
+    <div className="max-w-6xl mx-auto px-10 py-12">
         {/* Header Section */}
         <div className="mb-10 flex items-center justify-between">
           <div>
@@ -220,7 +218,6 @@ export default function PaymentPage() {
             </div>
           </div>
         </div>
-      </div>
-    </DashboardLayout>
+    </div>
   );
 }

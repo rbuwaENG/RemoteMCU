@@ -19,6 +19,7 @@ export interface GlobalStats {
   dailySessions: number;
   totalTransactions: number;
   totalCreditsIssued: number;
+  uptime: number;
 }
 
 export interface HourlyStats {
@@ -45,7 +46,8 @@ export const getGlobalStats = async (): Promise<GlobalStats> => {
     monthlyRevenue: 0,
     dailySessions: 0,
     totalTransactions: 0,
-    totalCreditsIssued: 0
+    totalCreditsIssued: 0,
+    uptime: 99.9
   };
 };
 
@@ -79,7 +81,7 @@ export const addMonthlyRevenue = async (amount: number): Promise<void> => {
 };
 
 export const getHourlyStats = async (date: string): Promise<HourlyStats[]> => {
-  const hourlyRef = collection(db, "stats", "hourly");
+  const hourlyRef = collection(db, "hourlyStats");
   const q = query(hourlyRef, where("date", "==", date));
   const hourlySnap = await getDocs(q);
   return hourlySnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as HourlyStats));
@@ -92,7 +94,7 @@ export const recordHourlyStats = async (
   serialSessions: number,
   flashUploads: number
 ): Promise<void> => {
-  const hourlyRef = doc(db, "stats", "hourly", `${date}-${hour}`);
+  const hourlyRef = doc(db, "hourlyStats", `${date}-${hour}`);
   await setDoc(hourlyRef, {
     date,
     hour,
@@ -104,7 +106,7 @@ export const recordHourlyStats = async (
 };
 
 export const getMonthlyStats = async (): Promise<any> => {
-  const monthlyRef = collection(db, "stats", "monthly");
+  const monthlyRef = collection(db, "monthlyStats");
   const monthlySnap = await getDocs(monthlyRef);
   return monthlySnap.docs.map(doc => doc.data());
 };
@@ -115,7 +117,7 @@ export interface MonthlyRevenueData {
 }
 
 export const getMonthlyRevenueData = async (): Promise<MonthlyRevenueData[]> => {
-  const monthlyRef = collection(db, "stats", "monthly");
+  const monthlyRef = collection(db, "monthlyStats");
   const monthlySnap = await getDocs(monthlyRef);
   return monthlySnap.docs.map(doc => ({
     month: doc.id,

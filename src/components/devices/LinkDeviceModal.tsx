@@ -29,6 +29,7 @@ export default function LinkDeviceModal({ isOpen, onClose, onDeviceLinked }: Lin
 
     try {
       const keyData = await validateShareKey(shareKey.trim().toUpperCase());
+      console.log("Share key validation result:", keyData);
       
       if (!keyData) {
         setError("Invalid or expired share key");
@@ -57,6 +58,7 @@ export default function LinkDeviceModal({ isOpen, onClose, onDeviceLinked }: Lin
       }
 
       await addSharedUser(keyData.deviceId, user.uid);
+      await redeemShareKey(keyData.id!, user.uid);
 
       setSuccess(true);
       onDeviceLinked?.(device.name);

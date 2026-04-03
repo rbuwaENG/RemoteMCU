@@ -36,6 +36,17 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
   return null;
 };
 
+export const getUserProfiles = async (uids: string[]): Promise<Map<string, UserProfile>> => {
+  const result = new Map<string, UserProfile>();
+  for (const uid of uids) {
+    const profile = await getUserProfile(uid);
+    if (profile) {
+      result.set(uid, profile);
+    }
+  }
+  return result;
+};
+
 export const updateUserProfile = async (uid: string, data: Partial<UserProfile>): Promise<void> => {
   const userRef = doc(db, "users", uid);
   await updateDoc(userRef, {

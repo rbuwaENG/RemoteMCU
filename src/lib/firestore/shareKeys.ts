@@ -48,7 +48,7 @@ export const createShareKey = async (
     deviceId,
     ownerId,
     grantedTo: null,
-    expiresAt: serverTimestamp(),
+    expiresAt,
     createdAt: serverTimestamp(),
     revoked: false
   });
@@ -72,12 +72,28 @@ export const validateShareKey = async (key: string): Promise<ShareKey | null> =>
   
   if (keySnap.empty) return null;
   
-  const keyData = keySnap.docs[0].data() as ShareKey;
+  const keyDoc = keySnap.docs[0];
+  const keyData = keyDoc.data() as Omit<ShareKey, 'id'>;
   
   if (keyData.revoked) return null;
-  if (keyData.expiresAt && keyData.expiresAt.toDate ? keyData.expiresAt.toDate() < new Date() : false) return null;
   
-  return keyData;
+  if (keyData.expiresAt) {
+    try {
+      let expiryDate: Date;
+      if (keyData.expiresAt && typeof keyData.expiresAt === 'object' && 'seconds' in keyData.expiresAt) {
+        expiryDate = new Date(keyData.expiresAt.seconds * 1000);
+      } else if (keyData.expiresAt.toDate) {
+        expiryDate = keyData.expiresAt.toDate();
+      } else {
+        expiryDate = new Date(keyData.expiresAt);
+      }
+      if (expiryDate < new Date()) return null;
+    } catch (e) {
+      console.error("Error checking expiry:", e);
+    }
+  }
+  
+  return { id: keyDoc.id, ...keyData };
 };
 
 export const redeemShareKey = async (keyId: string, userId: string): Promise<void> => {
