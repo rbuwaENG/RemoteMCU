@@ -6,12 +6,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDevices } from "@/lib/hooks/useDevices";
 import { deleteDevice, updateDevice, Device, removeActiveSession, setSessionDuration as updateSessionDuration, removeSharedUser, cleanExpiredSessions, leaveSharedDevice, generateSetupToken } from "@/lib/firestore/devices";
 import { createShareKey } from "@/lib/firestore/shareKeys";
+import { useNotifications } from "@/lib/hooks/useNotifications";
 import { getUserProfiles, UserProfile } from "@/lib/firestore/users";
 import LinkDeviceModal from "@/components/devices/LinkDeviceModal";
 
 export default function DevicesPage() {
   const { user } = useAuth();
   const { devices, totalDevices, onlineDevices, offlineDevices, loading, refresh } = useDevices(user?.uid);
+  const { addNotification } = useNotifications();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -21,6 +23,7 @@ export default function DevicesPage() {
   const [deviceName, setDeviceName] = useState("");
   const [deviceShareKey, setDeviceShareKey] = useState<string | null>(null);
   const [generatingKey, setGeneratingKey] = useState(false);
+  const [shareKeyError, setShareKeyError] = useState<string | null>(null);
   const [activeSessions, setActiveSessions] = useState<Device['activeSessions']>([]);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [sessionDuration, setSessionDuration] = useState<number>(60);
@@ -28,10 +31,11 @@ export default function DevicesPage() {
   const [progressKey, setProgressKey] = useState(0);
   const [deviceSetupToken, setDeviceSetupToken] = useState<string | null>(null);
   const [generatingToken, setGeneratingToken] = useState(false);
+  const [isDeviceOwner, setIsDeviceOwner] = useState(true);
 
   useEffect(() => {
     if (selectedDevice) {
-      setSessionDuration(selectedDevice.sessionDurationMinutes || 0);
+      setSessionDuration(selectedDevice.sessionDurationMinutes || 60);
     }
   }, [selectedDevice]);
 
@@ -79,9 +83,11 @@ export default function DevicesPage() {
     setSelectedDevice(device);
     setDeviceName(device.name);
     setDeviceShareKey(null);
+    setShareKeyError(null);
     setActiveSessions(device.activeSessions || []);
     setSessionDuration(device.sessionDurationMinutes || 60);
     setDeviceSetupToken(device.setupToken || null);
+    setIsDeviceOwner(device.ownerId === user?.uid);
     setShowSettingsModal(true);
   };
 
@@ -100,9 +106,16 @@ export default function DevicesPage() {
   const generateShareKey = async () => {
     if (!selectedDevice || !user) return;
     setGeneratingKey(true);
+    setShareKeyError(null);
     try {
-      const key = await createShareKey(selectedDevice.id, user.uid, 168);
-      setDeviceShareKey(key);
+      const result = await createShareKey(selectedDevice.id, user.uid, 168);
+      if (result.error) {
+        setShareKeyError(result.error);
+        addNotification("error", "Cannot Create Share Key", result.error);
+      } else if (result.key) {
+        setDeviceShareKey(result.key as string);
+        addNotification("success", "Share Key Created", "Share key has been generated successfully");
+      }
     } catch (error) {
       console.error("Failed to generate share key:", error);
     }
@@ -634,7 +647,6 @@ export default function DevicesPage() {
                     value={sessionDuration}
                     onChange={(e) => setSessionDuration(Number(e.target.value))}
                   >
-                    <option value={0}>No limit</option>
                     <option value={15}>15 minutes</option>
                     <option value={30}>30 minutes</option>
                     <option value={60}>1 hour</option>
@@ -643,60 +655,69 @@ export default function DevicesPage() {
                     <option value={1440}>24 hours</option>
                   </select>
                 </div>
-                <div className="border-t border-[#3C3C3C] pt-4 mt-4">
-                  <label className="block text-[12px] uppercase tracking-wider font-mono text-[#A0A0A0] mb-2">Setup Token</label>
-                  <p className="text-[10px] text-on-surface-variant mb-3">Use this token to connect a device that was skipped during onboarding</p>
-                  {deviceSetupToken ? (
-                    <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary">vpn_key</span>
-                        <span className="font-mono text-primary font-bold tracking-wider">{deviceSetupToken}</span>
-                      </div>
-                      <button 
-                        onClick={() => deviceSetupToken && navigator.clipboard.writeText(deviceSetupToken)}
-                        className="text-xs text-on-surface-variant hover:text-primary"
-                      >
-                        Copy
-                      </button>
+                {isDeviceOwner && (
+                  <>
+                    <div className="border-t border-[#3C3C3C] pt-4 mt-4">
+                      <label className="block text-[12px] uppercase tracking-wider font-mono text-[#A0A0A0] mb-2">Setup Token</label>
+                      <p className="text-[10px] text-on-surface-variant mb-3">Use this token to connect a device that was skipped during onboarding</p>
+                      {deviceSetupToken ? (
+                        <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-primary">vpn_key</span>
+                            <span className="font-mono text-primary font-bold tracking-wider">{deviceSetupToken}</span>
+                          </div>
+                          <button 
+                            onClick={() => deviceSetupToken && navigator.clipboard.writeText(deviceSetupToken)}
+                            className="text-xs text-on-surface-variant hover:text-primary"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={handleGenerateSetupToken}
+                          disabled={generatingToken}
+                          className="w-full py-2 border border-primary/30 text-primary text-xs font-bold rounded-lg hover:bg-primary/10 transition-all flex items-center justify-center gap-2"
+                        >
+                          <span className="material-symbols-outlined text-sm">add</span>
+                          {generatingToken ? "Generating..." : "Generate Setup Token"}
+                        </button>
+                      )}
                     </div>
-                  ) : (
-                    <button
-                      onClick={handleGenerateSetupToken}
-                      disabled={generatingToken}
-                      className="w-full py-2 border border-primary/30 text-primary text-xs font-bold rounded-lg hover:bg-primary/10 transition-all flex items-center justify-center gap-2"
-                    >
-                      <span className="material-symbols-outlined text-sm">add</span>
-                      {generatingToken ? "Generating..." : "Generate Setup Token"}
-                    </button>
-                  )}
-                </div>
-                <div className="border-t border-[#3C3C3C] pt-4 mt-4">
-                  <label className="block text-[12px] uppercase tracking-wider font-mono text-[#A0A0A0] mb-2">Share Device</label>
-                  <p className="text-[10px] text-on-surface-variant mb-3">Generate a key to share this device with others</p>
-                  {deviceShareKey ? (
-                    <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary">key</span>
-                        <span className="font-mono text-primary font-bold tracking-wider">{deviceShareKey}</span>
-                      </div>
-                      <button 
-                        onClick={() => deviceShareKey && navigator.clipboard.writeText(deviceShareKey)}
-                        className="text-xs text-on-surface-variant hover:text-primary"
-                      >
-                        Copy
-                      </button>
+                    <div className="border-t border-[#3C3C3C] pt-4 mt-4">
+                      <label className="block text-[12px] uppercase tracking-wider font-mono text-[#A0A0A0] mb-2">Share Device</label>
+                      <p className="text-[10px] text-on-surface-variant mb-3">Generate a key to share this device with others</p>
+                      {deviceShareKey ? (
+                        <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-primary">key</span>
+                            <span className="font-mono text-primary font-bold tracking-wider">{deviceShareKey}</span>
+                          </div>
+                          <button 
+                            onClick={() => deviceShareKey && navigator.clipboard.writeText(deviceShareKey)}
+                            className="text-xs text-on-surface-variant hover:text-primary"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={generateShareKey}
+                          disabled={generatingKey}
+                          className="w-full py-2 border border-primary/30 text-primary text-xs font-bold rounded-lg hover:bg-primary/10 transition-all flex items-center justify-center gap-2"
+                        >
+                          <span className="material-symbols-outlined text-sm">vpn_key</span>
+                          {generatingKey ? "Generating..." : "Generate Share Key"}
+                        </button>
+                      )}
+                      {shareKeyError && (
+                        <div className="mt-2 p-2 bg-error/10 border border-error/20 rounded text-[10px] text-error">
+                          {shareKeyError}
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <button
-                      onClick={generateShareKey}
-                      disabled={generatingKey}
-                      className="w-full py-2 border border-primary/30 text-primary text-xs font-bold rounded-lg hover:bg-primary/10 transition-all flex items-center justify-center gap-2"
-                    >
-                      <span className="material-symbols-outlined text-sm">vpn_key</span>
-                      {generatingKey ? "Generating..." : "Generate Share Key"}
-                    </button>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
               <div className="flex gap-3">
                 <button

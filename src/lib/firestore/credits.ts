@@ -19,9 +19,11 @@ export const burnCredits = async (
   deviceName: string, 
   action: string
 ): Promise<boolean> => {
+  console.log("burnCredits called:", { userId, creditsToBurn, deviceId, deviceName, action });
   try {
     const userRef = doc(db, "users", userId);
     const userDoc = await getDoc(userRef);
+    console.log("User doc exists:", userDoc.exists());
     
     if (!userDoc.exists()) {
       throw new Error("User not found");
@@ -29,14 +31,17 @@ export const burnCredits = async (
     
     const userData = userDoc.data();
     const currentCredits = userData.credits || 0;
+    console.log("Current credits:", currentCredits, "Credits to burn:", creditsToBurn);
     
     if (currentCredits < creditsToBurn) {
       throw new Error("Insufficient credits");
     }
     
+    console.log("Updating user credits...");
     await updateDoc(userRef, {
       credits: increment(-creditsToBurn)
     });
+    console.log("User credits updated");
     
     const transactionsRef = collection(db, "creditTransactions");
     await addDoc(transactionsRef, {
@@ -48,6 +53,7 @@ export const burnCredits = async (
       type: "burn",
       createdAt: Timestamp.now()
     });
+    console.log("Transaction recorded");
     
     return true;
   } catch (error) {

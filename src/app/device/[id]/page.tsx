@@ -5,6 +5,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { subscribeToDevice, Device, updateDevice, sendSerialCommand, addActiveSession, removeActiveSession, getDevice } from "@/lib/firestore/devices";
+import { burnCredits } from "@/lib/firestore/credits";
+import { useCreditBurnRates } from "@/lib/hooks/useCreditBurnRates";
+import { useNotifications } from "@/lib/hooks/useNotifications";
 import Editor, { OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import { createCompileJob, JOB_STATUS_LABELS, isJobInProgress } from "@/lib/firestore/compileJobs";
@@ -43,6 +46,8 @@ export default function DeviceDebugPage() {
   const router = useRouter();
   const { user } = useAuth();
   const deviceId = params.id as string;
+  const { rates: burnRates } = useCreditBurnRates();
+  const { addNotification } = useNotifications();
   
   const [device, setDevice] = useState<Device | null>(null);
   const [activeTab, setActiveTab] = useState<DebugTab>("workspace");
@@ -74,6 +79,7 @@ void loop() {
 }`);
 
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const deviceRef = useRef<Device | null>(null);
 
   const handleEditorMount: OnMount = (editor) => {
     editorRef.current = editor;
@@ -82,29 +88,82 @@ void loop() {
   useEffect(() => {
     if (!deviceId) return;
     
+    let prevSessionState = false;
+    
     const unsubscribe = subscribeToDevice(deviceId, (deviceData) => {
       setDevice(deviceData);
+      deviceRef.current = deviceData;
       setLoading(false);
+      
+      const hasSession = deviceData?.activeSessions?.find(s => s.userId === user?.uid);
+      if (prevSessionState && !hasSession) {
+        console.log("Session revoked detected via subscription, redirecting immediately...");
+        addNotification("error", "Session Terminated", "Your access has been revoked by the owner.");
+        setTimeout(() => {
+          router.push("/dashboard/devices");
+        }, 3000);
+        return;
+      }
+      if (hasSession) {
+        prevSessionState = true;
+      }
     });
     
     return () => unsubscribe();
-  }, [deviceId]);
+  }, [deviceId, user]);
 
   useEffect(() => {
     if (!deviceId || !user) return;
     
     const registerSession = async () => {
       const device = await getDevice(deviceId);
-      console.log("Device session duration:", device?.sessionDurationMinutes);
-      console.log("Device sharedWith:", device?.sharedWith);
+      if (!device) return;
+
+      const isOwner = device.ownerId === user.uid;
+      const isSharedUser = device.sharedWith?.includes(user.uid);
       
-      const durationMinutes = device?.sessionDurationMinutes;
+      // If NOT the owner and NOT a shared user, they shouldn't even be here, 
+      // but we do an extra check before burning.
+      if (!isOwner && !isSharedUser) return;
+
+      // Check if session already exists for this user to avoid double charging on refresh
+      const existingSession = device.activeSessions?.find(s => s.userId === user.uid);
+      const isNewSession = !existingSession;
+
+      const durationMinutes = device.sessionDurationMinutes || 0;
       let expiresAt: Date | undefined;
       
-      if (durationMinutes && durationMinutes > 0) {
+      if (durationMinutes > 0) {
         expiresAt = new Date();
         expiresAt.setMinutes(expiresAt.getMinutes() + durationMinutes);
-        console.log("Session will expire at:", expiresAt);
+      }
+      
+      // UPFRONT CREDIT BURN for new sessions
+      if (isNewSession && durationMinutes > 0) {
+        const defaultRates = [{ id: "session_per_hour", creditsPerUnit: 1 }];
+        const rates = burnRates.length > 0 ? burnRates : defaultRates;
+        const activeSessionRate = rates.find(r => r.id === "session_per_hour") || rates[0];
+        
+        const creditsPerHour = activeSessionRate?.creditsPerUnit || 1;
+        const totalCreditsToBurn = (durationMinutes / 60) * creditsPerHour;
+
+        try {
+          await burnCredits(
+            user.uid,
+            totalCreditsToBurn,
+            deviceId,
+            device.name || "Unknown Device",
+            `Remote Session (${durationMinutes} mins)`
+          );
+          addNotification("success", "Session Started", `${totalCreditsToBurn.toFixed(2)} credits deducted for ${durationMinutes} minute session.`);
+        } catch (error: any) {
+          console.error("[Session] Failed to burn credits:", error);
+          if (error.message?.includes("Insufficient")) {
+            addNotification("error", "Insufficient Credits", "You do not have enough credits to start this session.");
+            router.push("/dashboard/credits");
+            return;
+          }
+        }
       }
       
       await addActiveSession(deviceId, {
@@ -114,13 +173,20 @@ void loop() {
         connectedAt: new Date(),
         expiresAt
       });
-      console.log("Session registered with expiresAt:", expiresAt);
     };
     
     registerSession();
     
     const checkSessionExpiry = setInterval(() => {
       getDevice(deviceId).then(device => {
+        if (!device?.activeSessions?.find(s => s.userId === user.uid)) {
+          console.log("User session was revoked by owner (polling check)");
+          removeActiveSession(deviceId, user.uid);
+          alert("Your session has been revoked by the owner.");
+          router.push("/dashboard/devices");
+          return;
+        }
+        
         const session = device?.activeSessions?.find(s => s.userId === user.uid);
         if (session?.expiresAt) {
           const expiryDate = session.expiresAt.toDate ? session.expiresAt.toDate() : new Date(session.expiresAt.seconds * 1000);
@@ -131,13 +197,26 @@ void loop() {
           }
         }
       }).catch(console.error);
-    }, 30000);
+    }, 10000);
     
     return () => {
       removeActiveSession(deviceId, user.uid);
       clearInterval(checkSessionExpiry);
     };
   }, [deviceId, user]);
+
+  useEffect(() => {
+    if (!deviceId || !user) return;
+    
+    // We already handled upfront burning in registerSession.
+    // So we just show the connection message here.
+    addNotification("info", "Connected", `Device ${device?.name || ""} is active.`);
+    
+    // No interval-based burning anymore as per user request.
+    return () => {
+      removeActiveSession(deviceId, user.uid);
+    };
+  }, [deviceId, user]); // Note: removed burnRates dependency as it is handled in registerSession
 
   useEffect(() => {
     if (showBootScreen) {

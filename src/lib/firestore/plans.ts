@@ -16,6 +16,7 @@ export interface Plan {
   price: number;
   credits: number;
   deviceQuota: number;
+  maxSharedUsers: number;
   features: string[];
   popular: boolean;
   active: boolean;
@@ -33,6 +34,7 @@ export interface CreditBurnRate {
 }
 
 export const defaultCreditBurnRates: CreditBurnRate[] = [
+  { id: "session_per_hour", name: "Session Time", description: "Credits burned per hour of active session", creditsPerUnit: 1, unit: "per hour", category: "serial", active: true },
   { id: "ota_upload", name: "OTA Firmware Upload", description: "Credits burned per firmware upload via OTA", creditsPerUnit: 5, unit: "per MB", category: "upload", active: true },
   { id: "serial_monitor", name: "Serial Monitor", description: "Credits burned for serial monitor data streaming", creditsPerUnit: 1, unit: "per 1000 chars", category: "serial", active: true },
   { id: "camera_stream", name: "Camera Stream", description: "Credits burned for live camera feed", creditsPerUnit: 10, unit: "per minute", category: "camera", active: true },

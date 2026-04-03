@@ -1,16 +1,19 @@
 import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  collection, 
-  query, 
-  where, 
+  doc,
+  getDoc,
   getDocs,
-  serverTimestamp 
+  collection,
+  query,
+  where,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  increment
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { burnCredits } from "./credits";
+import { getDevice } from "./devices";
 
 export interface ShareKey {
   id: string;
@@ -36,7 +39,50 @@ export const createShareKey = async (
   deviceId: string, 
   ownerId: string, 
   expiresInHours: number = 24
-): Promise<string> => {
+): Promise<{ key?: string; error?: string }> => {
+  const deviceRef = doc(db, "devices", deviceId);
+  const deviceSnap = await getDoc(deviceRef);
+  
+  if (!deviceSnap.exists()) {
+    return { error: "Device not found" };
+  }
+  
+  const device = deviceSnap.data() as any;
+  
+  // Get owner's profile to check plan
+  const userRef = doc(db, "users", ownerId);
+  const userSnap = await getDoc(userRef);
+  
+  let maxSharedUsers = 1; // Default
+  
+  if (userSnap.exists()) {
+    const userData = userSnap.data() as any;
+    const planId = userData.plan;
+    
+    if (planId) {
+      const plansRef = doc(db, "plans", "default");
+      const plansSnap = await getDoc(plansRef);
+      if (plansSnap.exists()) {
+        const plansData = plansSnap.data() as any;
+        if (plansData.plans) {
+          const plan = plansData.plans.find((p: any) => p.id === planId);
+          if (plan) {
+            maxSharedUsers = plan.maxSharedUsers ?? 1;
+          }
+        }
+      }
+    }
+  }
+  
+  const currentShared = (device.sharedWith || []).length;
+  
+  // Check if adding one more would exceed the limit
+  if (maxSharedUsers > 0 && (currentShared + 1) > maxSharedUsers) {
+    return { 
+      error: `Your current plan allows ${maxSharedUsers} shared users. Please upgrade your plan or remove existing shared users before creating a new share key.` 
+    };
+  }
+  
   const shareKeysRef = collection(db, "shareKeys");
   const newDocRef = doc(shareKeysRef);
   const key = generateShareKey();
@@ -53,7 +99,7 @@ export const createShareKey = async (
     revoked: false
   });
 
-  return key;
+  return { key };
 };
 
 export const getShareKeyById = async (keyId: string): Promise<ShareKey | null> => {
@@ -98,6 +144,39 @@ export const validateShareKey = async (key: string): Promise<ShareKey | null> =>
 
 export const redeemShareKey = async (keyId: string, userId: string): Promise<void> => {
   const keyRef = doc(db, "shareKeys", keyId);
+  const keySnap = await getDoc(keyRef);
+  
+  if (keySnap.exists()) {
+    const keyData = keySnap.data() as any;
+    const deviceId = keyData.deviceId;
+    const ownerId = keyData.ownerId;
+    
+    // Get device info to burn credits
+    const deviceRef = doc(db, "devices", deviceId);
+    const deviceSnap = await getDoc(deviceRef);
+    if (deviceSnap.exists()) {
+      const deviceData = deviceSnap.data();
+      // Burn credits for creating a shared session via share key
+      // 1 credit per hour of session time (minimum 1 credit)
+      const sessionHours = Math.max(1, deviceData.sessionDurationMinutes ? deviceData.sessionDurationMinutes / 60 : 1);
+      const creditsToBurn = Math.ceil(sessionHours); // Round up to nearest whole credit
+      
+      try {
+        await burnCredits(
+          userId, // CHARGE REDEEMER (Guest)
+          creditsToBurn, 
+          deviceId, 
+          deviceData.name || 'Unknown Device', 
+          `Remote Session Access (${deviceData.sessionDurationMinutes} min limit)`
+        );
+        console.log(`Burned ${creditsToBurn} credits for guest: ${userId}`);
+      } catch (burnError) {
+        console.error("Failed to burn credits for guest:", burnError);
+        // Don't fail the whole operation if credit burning fails
+      }
+    }
+  }
+  
   await updateDoc(keyRef, {
     grantedTo: userId,
     redeemedAt: serverTimestamp()

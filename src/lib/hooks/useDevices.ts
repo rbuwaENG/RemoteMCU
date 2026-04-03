@@ -33,19 +33,29 @@ export const useDevices = (userId: string | undefined) => {
       });
     };
 
+    let ownedDevices: Device[] = [];
+    let sharedDevices: Device[] = [];
+
+    const updateDevices = () => {
+      const processedOwned = processDevices(ownedDevices);
+      const processedShared = processDevices(sharedDevices);
+      setDevices([...processedOwned, ...processedShared]);
+      setLoading(false);
+    };
+
     const unsubOwner = subscribeToDevicesByOwner(userId, (owned) => {
-      const processedOwned = processDevices(owned);
-      
-      const unsubShared = subscribeToSharedDevices(userId, (shared) => {
-        const processedShared = processDevices(shared);
-        setDevices([...processedOwned, ...processedShared]);
-        setLoading(false);
-        unsubShared();
-      });
+      ownedDevices = owned;
+      updateDevices();
+    });
+
+    const unsubShared = subscribeToSharedDevices(userId, (shared) => {
+      sharedDevices = shared;
+      updateDevices();
     });
 
     return () => {
       unsubOwner();
+      unsubShared();
     };
   }, [userId, refreshKey]);
 

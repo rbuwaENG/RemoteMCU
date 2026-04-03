@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { defaultCreditBurnRates, CreditBurnRate } from "@/lib/firestore/plans";
 
@@ -13,15 +13,21 @@ export const useCreditBurnRates = () => {
     const settingsRef = doc(db, "settings", "creditBurnRates");
     
     const unsubscribe = onSnapshot(settingsRef,
-      (docSnap) => {
+      async (docSnap) => {
         if (docSnap.exists() && docSnap.data().rates) {
           setRates(docSnap.data().rates);
         } else {
+          // Initialize with defaults if not exists
+          const burnSnap = await getDoc(settingsRef);
+          if (!burnSnap.exists() || !burnSnap.data().rates) {
+            await setDoc(settingsRef, { rates: defaultCreditBurnRates, updatedAt: new Date() }, { merge: true });
+          }
           setRates(defaultCreditBurnRates);
         }
         setLoading(false);
       },
       (err) => {
+        console.error("Error fetching burn rates:", err);
         setError(err.message);
         setLoading(false);
       }

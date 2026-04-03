@@ -21,10 +21,15 @@ export interface UserProfile {
   credits: number;
   plan: string;
   deviceQuota: number;
+  maxSharedUsers?: number;
   status: "active" | "suspended";
   createdAt: any;
   updatedAt: any;
   lastActiveAt: any;
+  planStartDate?: any;
+  planEndDate?: any;
+  autoRenew?: boolean;
+  billingCycle?: "monthly" | "yearly";
 }
 
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
@@ -75,6 +80,33 @@ export const updateUserStatus = async (uid: string, status: "active" | "suspende
   const userRef = doc(db, "users", uid);
   await updateDoc(userRef, {
     status,
+    updatedAt: serverTimestamp()
+  });
+};
+
+export const applyPlan = async (
+  uid: string, 
+  plan: {
+    id: string;
+    name: string;
+    credits: number;
+    price: number;
+    nodes: number;
+  },
+  billingCycle: "monthly" | "yearly" = "monthly"
+): Promise<void> => {
+  const userRef = doc(db, "users", uid);
+  const now = new Date();
+  const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  
+  await updateDoc(userRef, {
+    plan: plan.id,
+    credits: plan.credits,
+    deviceQuota: plan.nodes,
+    planStartDate: now,
+    planEndDate: endDate,
+    autoRenew: true,
+    billingCycle: billingCycle,
     updatedAt: serverTimestamp()
   });
 };

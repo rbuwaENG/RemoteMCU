@@ -12,9 +12,27 @@ import {
   limit,
   onSnapshot,
   Unsubscribe,
-  serverTimestamp 
+  serverTimestamp,
+  increment
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { addDoc } from "firebase/firestore";
+import { burnCredits } from "./credits";
+
+async function addPersistentNotification(userId: string, title: string, message: string, type: "info" | "warning" | "error" | "success" = "info") {
+  try {
+    await addDoc(collection(db, "notifications"), {
+      userId,
+      title,
+      message,
+      type,
+      read: false,
+      timestamp: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("Failed to add persistent notification:", error);
+  }
+}
 
 export interface Device {
   id: string;
@@ -28,6 +46,7 @@ export interface Device {
   lastSeen: any;
   createdAt: any;
   sharedWith: string[];
+  maxSharedUsers?: number;
   code?: string;
   setupToken?: string;
   activeSessions?: {
@@ -110,29 +129,95 @@ export const deleteDevice = async (deviceId: string): Promise<void> => {
   await deleteDoc(deviceRef);
 };
 
-export const addSharedUser = async (deviceId: string, userId: string): Promise<void> => {
+export const addSharedUser = async (deviceId: string, userId: string): Promise<{ success: boolean; message?: string }> => {
+  console.log("addSharedUser called:", deviceId, userId);
   const deviceRef = doc(db, "devices", deviceId);
   const device = await getDevice(deviceId);
   if (device) {
     const sharedWith = device.sharedWith || [];
-    if (!sharedWith.includes(userId)) {
-      const now = new Date();
-      const expiresAt = device.sessionDurationMinutes && device.sessionDurationMinutes > 0
-        ? new Date(now.getTime() + device.sessionDurationMinutes * 60000)
-        : null;
-      
-      const sharedAccess = device.sharedAccess || {};
-      sharedAccess[userId] = {
-        sharedAt: now,
-        expiresAt: expiresAt
-      };
-      
-      await updateDoc(deviceRef, {
-        sharedWith: [...sharedWith, userId],
-        sharedAccess: sharedAccess
-      });
+    
+    if (sharedWith.includes(userId)) {
+      return { success: true };
     }
+    
+    const ownerRef = doc(db, "users", device.ownerId);
+    console.log("Fetching owner:", device.ownerId);
+    const ownerSnap = await getDoc(ownerRef);
+    console.log("Owner exists:", ownerSnap.exists());
+    
+    let maxSharedUsers = 1;
+    if (ownerSnap.exists()) {
+      const ownerData = ownerSnap.data() as any;
+      const planId = ownerData.plan;
+      console.log("Owner planId:", planId);
+      if (planId) {
+        const plansRef = doc(db, "plans", "default");
+        console.log("Fetching plans from: plans/default");
+        const plansSnap = await getDoc(plansRef);
+        console.log("Plans exists:", plansSnap.exists());
+        if (plansSnap.exists()) {
+          const plansData = plansSnap.data() as any;
+          if (plansData.plans) {
+            const plan = plansData.plans.find((p: any) => p.id === planId);
+            if (plan) {
+              maxSharedUsers = plan.maxSharedUsers ?? 1;
+              console.log("maxSharedUsers from plan:", maxSharedUsers);
+            }
+          }
+        }
+      }
+    }
+    
+    const totalPotentialUsers = sharedWith.length;
+    console.log("currentSharedUsers:", totalPotentialUsers, "maxSharedUsers:", maxSharedUsers);
+    
+    if (maxSharedUsers > 0 && (totalPotentialUsers + 1) > maxSharedUsers) {
+      return { 
+        success: false, 
+        message: `Your current plan allows ${maxSharedUsers} shared users. Please upgrade your plan or remove existing shared users.` 
+      };
+    }
+    
+    console.log("Updating device with shared user...");
+    const now = new Date();
+    const expiresAt = device.sessionDurationMinutes && device.sessionDurationMinutes > 0
+      ? new Date(now.getTime() + device.sessionDurationMinutes * 60000)
+      : null;
+    
+    const sharedAccess = device.sharedAccess || {};
+    sharedAccess[userId] = {
+      sharedAt: now,
+      expiresAt: expiresAt
+    };
+    
+    await updateDoc(deviceRef, {
+      sharedWith: [...sharedWith, userId],
+      sharedAccess: sharedAccess
+    });
+    
+    // Burn credits for creating a shared session
+    // 1 credit per hour of session time (minimum 1 credit)
+    const sessionHours = Math.max(1, device.sessionDurationMinutes ? device.sessionDurationMinutes / 60 : 1);
+    const creditsToBurn = Math.ceil(sessionHours); // Round up to nearest whole credit
+    try {
+      await burnCredits(
+        userId, // CHARGE GUEST
+        creditsToBurn, 
+        deviceId, 
+        device.name || 'Unknown Device', 
+        `Remote Session Access (${device.sessionDurationMinutes} min limit)`
+      );
+      console.log(`Burned ${creditsToBurn} credits for guest: ${userId}`);
+    } catch (burnError) {
+      console.error("Failed to burn credits for guest:", burnError);
+      // Don't fail the whole operation if credit burning fails
+    }
+    
+    console.log("Device updated with shared user");
+    
+    return { success: true };
   }
+  return { success: false, message: "Device not found" };
 };
 
 export const removeSharedUser = async (deviceId: string, userId: string): Promise<void> => {
@@ -140,9 +225,21 @@ export const removeSharedUser = async (deviceId: string, userId: string): Promis
   const device = await getDevice(deviceId);
   if (device) {
     const sharedWith = device.sharedWith || [];
+    const sharedAccess = { ...(device.sharedAccess || {}) };
+    delete sharedAccess[userId];
+    
     await updateDoc(deviceRef, {
-      sharedWith: sharedWith.filter(id => id !== userId)
+      sharedWith: sharedWith.filter(id => id !== userId),
+      sharedAccess: sharedAccess
     });
+
+    // Send persistent notification to the revoked user
+    await addPersistentNotification(
+      userId,
+      "Access Revoked",
+      `The owner has revoked your access to ${device.name || 'the device'}.`,
+      "warning"
+    );
   }
 };
 
@@ -245,6 +342,14 @@ export const removeActiveSession = async (deviceId: string, userId: string): Pro
   const device = await getDevice(deviceId);
   const sessions = (device?.activeSessions || []).filter(s => s.userId !== userId);
   await updateDoc(deviceRef, { activeSessions: sessions });
+
+  // Send persistent notification if a session was actually removed
+  await addPersistentNotification(
+    userId,
+    "Session Terminated",
+    `Your active session on ${device?.name || 'the device'} has been terminated by the owner.`,
+    "error"
+  );
 };
 
 export const getActiveSessions = async (deviceId: string): Promise<Device['activeSessions']> => {
@@ -288,6 +393,13 @@ export const leaveSharedDevice = async (deviceId: string, userId: string): Promi
   console.log("Current sharedWith:", device.sharedWith);
   console.log("Current activeSessions:", device.activeSessions);
   
+  // Get the target user's info for notification
+  const targetUserRef = doc(db, "users", userId);
+  const targetUserSnap = await getDoc(targetUserRef);
+  const targetUserName = targetUserSnap.exists() 
+    ? (targetUserSnap.data() as any).displayName || (targetUserSnap.data() as any).email || 'User'
+    : 'User';
+  
   const newSharedWith = (device.sharedWith || []).filter(id => id !== userId);
   const newActiveSessions = (device.activeSessions || []).filter(s => s.userId !== userId);
   
@@ -302,6 +414,20 @@ export const leaveSharedDevice = async (deviceId: string, userId: string): Promi
     activeSessions: newActiveSessions,
     sharedAccess: newSharedAccess
   });
+  
+  // Send notification to the user whose access was revoked
+  try {
+    await addPersistentNotification(
+      userId,
+      "Access Revoked",
+      `The owner has revoked your access to ${device.name || 'the device'}.`,
+      "warning"
+    );
+    console.log(`Sent access revoked notification to user ${userId}`);
+  } catch (notifyError) {
+    console.error("Failed to send access revoked notification:", notifyError);
+  }
+  
   console.log("Successfully left device");
 };
 

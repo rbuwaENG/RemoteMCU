@@ -16,6 +16,7 @@ interface Plan {
   price: number;
   credits: number;
   nodes: number;
+  maxSharedUsers: number;
   features: string[];
   popular?: boolean;
   active?: boolean;
@@ -50,11 +51,14 @@ export default function PlanManagementPage() {
   const { stats, monthlyRevenue } = useAdminStats();
   const { rates: creditBurnRates, loading: burnRatesLoading } = useCreditBurnRates();
   
+  console.log("Burn rates:", creditBurnRates.map(r => r.id));
+  console.log("Loading:", burnRatesLoading);
+  
   const [plansData, setPlansData] = useState<Plan[]>([
-    { id: "free", name: "Free Tier", price: 0, credits: 10, nodes: 3, features: ["Public Access"], active: true },
-    { id: "starter", name: "Starter Tier", price: 2.99, credits: 50, nodes: 10, features: ["Basic OTA"], active: true },
-    { id: "popular", name: "Pro Tier", price: 9.99, credits: 200, nodes: -1, features: ["Fast OTA", "Priority Support"], popular: true, active: true },
-    { id: "pro", name: "Enterprise Tier", price: 19.99, credits: 500, nodes: -1, features: ["All Features"], active: true },
+    { id: "free", name: "Free Tier", price: 0, credits: 10, nodes: 3, maxSharedUsers: 1, features: ["Public Access"], active: true },
+    { id: "starter", name: "Starter Tier", price: 2.99, credits: 50, nodes: 10, maxSharedUsers: 3, features: ["Basic OTA"], active: true },
+    { id: "popular", name: "Pro Tier", price: 9.99, credits: 200, nodes: -1, maxSharedUsers: 10, features: ["Fast OTA", "Priority Support"], popular: true, active: true },
+    { id: "pro", name: "Enterprise Tier", price: 19.99, credits: 500, nodes: -1, maxSharedUsers: -1, features: ["All Features"], active: true },
   ]);
   
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
@@ -69,6 +73,7 @@ export default function PlanManagementPage() {
     price: 0,
     credits: 50,
     nodes: 10,
+    maxSharedUsers: 1,
     features: ""
   });
 
@@ -77,6 +82,7 @@ export default function PlanManagementPage() {
     price: 0,
     credits: 50,
     nodes: 10,
+    maxSharedUsers: 1,
     features: ""
   });
 
@@ -141,6 +147,7 @@ export default function PlanManagementPage() {
       price: newPlan.price,
       credits: newPlan.credits,
       nodes: newPlan.nodes,
+      maxSharedUsers: newPlan.maxSharedUsers || 1,
       features: newPlan.features.split(",").map(f => f.trim()).filter(f => f),
       active: true,
     };
@@ -165,7 +172,7 @@ export default function PlanManagementPage() {
       }
       
       setShowNewPlanModal(false);
-      setNewPlan({ name: "", price: 0, credits: 50, nodes: 10, features: "" });
+      setNewPlan({ name: "", price: 0, credits: 50, nodes: 10, maxSharedUsers: 1, features: "" });
     } catch (error) {
       console.error("Failed to create plan:", error);
     }
@@ -176,7 +183,7 @@ export default function PlanManagementPage() {
     
     const updatedPlans = plansData.map(p => 
       p.id === editingPlan.id 
-        ? { ...p, name: editPlan.name, price: editPlan.price, credits: editPlan.credits, nodes: editPlan.nodes, features: editPlan.features.split(",").map(f => f.trim()).filter(f => f) }
+        ? { ...p, name: editPlan.name, price: editPlan.price, credits: editPlan.credits, nodes: editPlan.nodes, maxSharedUsers: editPlan.maxSharedUsers, features: editPlan.features.split(",").map(f => f.trim()).filter(f => f) }
         : p
     );
     setPlansData(updatedPlans);
@@ -198,7 +205,7 @@ export default function PlanManagementPage() {
       }
       
       setEditingPlan(null);
-      setEditPlan({ name: "", price: 0, credits: 50, nodes: 10, features: "" });
+      setEditPlan({ name: "", price: 0, credits: 50, nodes: 10, maxSharedUsers: 1, features: "" });
     } catch (error) {
       console.error("Failed to save plan:", error);
     }
@@ -211,6 +218,7 @@ export default function PlanManagementPage() {
       price: plan.price,
       credits: plan.credits,
       nodes: plan.nodes,
+      maxSharedUsers: plan.maxSharedUsers || 1,
       features: plan.features.join(", ")
     });
   };
@@ -300,8 +308,22 @@ export default function PlanManagementPage() {
           >
             <span className="material-symbols-outlined text-sm">add</span>
             Create New Plan
-          </button>
-        </div>
+              </button>
+              {!creditBurnRates.find(r => r.id === "session_per_hour") && (
+                <button 
+                  onClick={async () => {
+                    const { updateCreditBurnRates } = await import("@/lib/firestore/plans");
+                    const newRate = { id: "session_per_hour", name: "Session Time", description: "Credits burned per hour of active session", creditsPerUnit: 1, unit: "per hour", category: "serial" as const, active: true };
+                    const updated = [...creditBurnRates, newRate];
+                    await updateCreditBurnRates(updated);
+                    window.location.reload();
+                  }}
+                  className="px-3 py-1 bg-error/20 text-error text-xs rounded hover:bg-error/30"
+                >
+                  Add Session Time
+                </button>
+              )}
+            </div>
       </section>
 
       <div className="grid grid-cols-12 gap-6 items-start">
@@ -400,9 +422,18 @@ export default function PlanManagementPage() {
                           <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1.5">Devices</label>
                           <input
                             className="w-full bg-surface-container-high border-b border-zinc-700 py-2 px-3 text-on-surface text-sm focus:border-primary transition-colors focus:ring-0"
-                            type="number"
-                            value={plan.nodes === -1 ? "Unlimited" : plan.nodes}
+                            type="text"
+                            value={plan.nodes === -1 ? "Unlimited" : String(plan.nodes ?? 0)}
                             onChange={(e) => handleSavePlan(plan.id, { nodes: e.target.value === "Unlimited" ? -1 : parseInt(e.target.value) || 0 })}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-mono text-zinc-500 uppercase block mb-1.5">Shared Users</label>
+                          <input
+                            className="w-full bg-surface-container-high border-b border-zinc-700 py-2 px-3 text-on-surface text-sm focus:border-primary transition-colors focus:ring-0"
+                            type="text"
+                            value={plan.maxSharedUsers === -1 ? "Unlimited" : String(plan.maxSharedUsers ?? 1)}
+                            onChange={(e) => handleSavePlan(plan.id, { maxSharedUsers: e.target.value === "Unlimited" ? -1 : parseInt(e.target.value) || 0 })}
                           />
                         </div>
                       </div>
@@ -437,16 +468,50 @@ export default function PlanManagementPage() {
             <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low">
               <div>
                 <h3 className="text-lg font-bold text-on-surface tracking-tight">Credit Burn Rates</h3>
-                <p className="text-xs text-on-surface-variant">Configure how credits are consumed for each platform operation.</p>
+                <p className="text-xs text-on-surface-variant">Configure how credits are consumed for each platform operation. Default: 1 credit/hour for session.</p>
               </div>
+              <button 
+                onClick={async () => {
+                  const { updateCreditBurnRates } = await import("@/lib/firestore/plans");
+                  await updateCreditBurnRates([
+                    { id: "session_per_hour", name: "Session Time", description: "Credits burned per hour of active session", creditsPerUnit: 1, unit: "per hour", category: "serial" as const, active: true },
+                    { id: "ota_upload", name: "OTA Firmware Upload", description: "Credits burned per firmware upload via OTA", creditsPerUnit: 5, unit: "per MB", category: "upload" as const, active: true },
+                    { id: "serial_monitor", name: "Serial Monitor", description: "Credits burned for serial monitor data streaming", creditsPerUnit: 1, unit: "per 1000 chars", category: "serial" as const, active: true },
+                    { id: "camera_stream", name: "Camera Stream", description: "Credits burned for live camera feed", creditsPerUnit: 10, unit: "per minute", category: "camera" as const, active: true },
+                    { id: "file_transfer", name: "File Transfer", description: "Credits burned for file uploads/downloads", creditsPerUnit: 2, unit: "per MB", category: "upload" as const, active: true },
+                    { id: "api_calls", name: "API Calls", description: "Credits burned for REST API requests", creditsPerUnit: 0.1, unit: "per request", category: "api" as const, active: true },
+                    { id: "cloud_storage", name: "Cloud Storage", description: "Credits burned for cloud data storage", creditsPerUnit: 1, unit: "per MB/day", category: "storage" as const, active: true },
+                  ]);
+                }}
+                className="px-3 py-1 bg-primary/20 text-primary text-xs rounded hover:bg-primary/30"
+              >
+                Reset Defaults
+              </button>
+              {(!creditBurnRates.find(r => r.id === "session_per_hour") || creditBurnRates.length < 7) && (
+                <button 
+                  onClick={async () => {
+                    const { updateCreditBurnRates } = await import("@/lib/firestore/plans");
+                    const newRate = { id: "session_per_hour", name: "Session Time", description: "Credits burned per hour of active session", creditsPerUnit: 1, unit: "per hour", category: "serial" as const, active: true };
+                    const updated = [...creditBurnRates, newRate];
+                    await updateCreditBurnRates(updated);
+                    window.location.reload();
+                  }}
+                  className="ml-2 px-3 py-1 bg-error/20 text-error text-xs rounded hover:bg-error/30"
+                >
+                  Add Session Time
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
+              <div className="col-span-full text-xs text-on-surface-variant mb-2">
+                Showing {creditBurnRates.length} burn rates
+              </div>
               {creditBurnRates.map((rate) => (
                 <div key={rate.id} className="bg-surface-container-high rounded-lg p-4 border border-outline-variant/10">
                   <div className="flex justify-between items-start mb-3">
                     <div>
-                      <h4 className="text-sm font-bold text-on-surface">{rate.name}</h4>
-                      <p className="text-[10px] text-on-surface-variant">{rate.description}</p>
+                      <h4 className="text-sm font-bold text-on-surface">{rate.name || rate.id}</h4>
+                      <p className="text-[10px] text-on-surface-variant">{rate.description || rate.unit}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input 
@@ -465,12 +530,12 @@ export default function PlanManagementPage() {
                         className="w-full bg-surface-container-low border-b border-zinc-700 py-1 px-2 text-on-surface text-sm focus:border-primary transition-colors focus:ring-0"
                         type="number"
                         step="0.1"
-                        value={rate.creditsPerUnit}
+                        value={rate.creditsPerUnit ?? 0}
                         onChange={(e) => handleSaveCreditBurnRate(rate.id, { creditsPerUnit: parseFloat(e.target.value) || 0 })}
                       />
                     </div>
                     <div className="px-2 py-1 bg-primary/10 rounded text-xs text-primary font-mono">
-                      {rate.creditsPerUnit} cr
+                      {rate.creditsPerUnit ?? 0} cr
                     </div>
                   </div>
                   <div className="mt-2 flex items-center gap-2">
@@ -618,6 +683,16 @@ export default function PlanManagementPage() {
                 />
               </div>
               <div>
+                <label className="text-xs font-mono text-on-surface-variant uppercase">Max Shared Users</label>
+                <input
+                  className="w-full bg-surface-container-high border-none border-b border-transparent focus:border-primary focus:ring-0 text-on-surface rounded-sm px-4 py-2 mt-1"
+                  type="number"
+                  placeholder="-1 for unlimited"
+                  value={newPlan.maxSharedUsers || ""}
+                  onChange={(e) => setNewPlan({ ...newPlan, maxSharedUsers: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
                 <label className="text-xs font-mono text-on-surface-variant uppercase">Features (comma separated)</label>
                 <input
                   className="w-full bg-surface-container-high border-none border-b border-transparent focus:border-primary focus:ring-0 text-on-surface rounded-sm px-4 py-2 mt-1"
@@ -628,7 +703,7 @@ export default function PlanManagementPage() {
               </div>
               <div className="flex gap-3 pt-4">
                 <button
-                  onClick={() => { setShowNewPlanModal(false); setNewPlan({ name: "", price: 0, credits: 50, nodes: 10, features: "" }); }}
+                  onClick={() => { setShowNewPlanModal(false); setNewPlan({ name: "", price: 0, credits: 50, nodes: 10, maxSharedUsers: 1, features: "" }); }}
                   className="flex-1 px-4 py-2 border border-white/10 text-white/60 rounded hover:bg-white/5 transition-colors"
                 >
                   Cancel
@@ -693,6 +768,16 @@ export default function PlanManagementPage() {
                 />
               </div>
               <div>
+                <label className="text-xs font-mono text-on-surface-variant uppercase">Max Shared Users</label>
+                <input
+                  className="w-full bg-surface-container-high border-none border-b border-transparent focus:border-primary focus:ring-0 text-on-surface rounded-sm px-4 py-2 mt-1"
+                  type="number"
+                  placeholder="-1 for unlimited"
+                  value={editPlan.maxSharedUsers || ""}
+                  onChange={(e) => setEditPlan({ ...editPlan, maxSharedUsers: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
                 <label className="text-xs font-mono text-on-surface-variant uppercase">Features (comma separated)</label>
                 <input
                   className="w-full bg-surface-container-high border-none border-b border-transparent focus:border-primary focus:ring-0 text-on-surface rounded-sm px-4 py-2 mt-1"
@@ -703,7 +788,7 @@ export default function PlanManagementPage() {
               </div>
               <div className="flex gap-3 pt-4">
                 <button
-                  onClick={() => { setEditingPlan(null); setEditPlan({ name: "", price: 0, credits: 50, nodes: 10, features: "" }); }}
+                  onClick={() => { setEditingPlan(null); setEditPlan({ name: "", price: 0, credits: 50, nodes: 10, maxSharedUsers: 1, features: "" }); }}
                   className="flex-1 px-4 py-2 border border-white/10 text-white/60 rounded hover:bg-white/5 transition-colors"
                 >
                   Cancel

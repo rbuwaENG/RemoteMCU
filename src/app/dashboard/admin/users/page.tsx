@@ -122,6 +122,7 @@ export default function AdminUsersPage() {
         credits: 10,
         plan: "free",
         deviceQuota: 3,
+        maxSharedUsers: 1,
         status: "active",
         lastActiveAt: null,
       });

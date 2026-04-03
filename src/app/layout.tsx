@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "@/styles/globals.css";
 import "@/styles/design-system.css";
 import { Providers } from "@/components/providers";
+import ToastContainer from "@/components/layout/ToastContainer";
 
 export const metadata: Metadata = {
   title: "RemoteMCU — Remote Hardware Debugging & Management Platform",
@@ -139,7 +140,10 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-[#1E1E1E] text-on-surface font-body selection:bg-primary selection:text-on-primary min-h-screen flex flex-col">
-        <Providers>{children}</Providers>
+        <Providers>
+          <ToastContainer />
+          {children}
+        </Providers>
       </body>
     </html>
   );

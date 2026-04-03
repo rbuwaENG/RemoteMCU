@@ -1,22 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-
-const creditPackages = [
-  { name: "Starter", credits: 50, price: 2.99 },
-  { name: "Popular", credits: 200, price: 9.99 },
-  { name: "Pro", credits: 500, price: 19.99 },
-];
+import { useSearchParams, useRouter } from "next/navigation";
+import { addCredits } from "@/lib/firestore/credits";
+import { applyPlan } from "@/lib/firestore/users";
+import { usePlans } from "@/lib/hooks/usePlans";
 
 export default function PaymentPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { plans, loading: plansLoading } = usePlans();
   const packageName = searchParams.get("package") || "popular";
+  const isSubscription = searchParams.get("type") === "subscription";
 
-  const selectedPkg = creditPackages.find(p => p.name.toLowerCase() === packageName) || creditPackages[1];
+  const selectedPlan = plans.find(p => p.id.toLowerCase() === packageName.toLowerCase());
+  const selectedPkg = selectedPlan ? {
+    name: selectedPlan.name.replace(" Tier", ""),
+    credits: selectedPlan.credits,
+    price: selectedPlan.price
+  } : { name: "Popular", credits: 200, price: 9.99 };
 
   const [paymentMethod, setPaymentMethod] = useState("credit_card");
   const [cardDetails, setCardDetails] = useState({
@@ -25,22 +30,106 @@ export default function PaymentPage() {
     expiry: "",
     cvv: ""
   });
+  const [processing, setProcessing] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const isFreePlan = selectedPlan && selectedPlan.price === 0;
+  const needsPayment = !isFreePlan;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle payment processing here
-    alert("Payment processing would happen here!");
+    if (!user || plansLoading) return;
+    
+    setProcessing(true);
+    try {
+      if (isSubscription && selectedPlan) {
+        await applyPlan(user.uid, {
+          id: selectedPlan.id,
+          name: selectedPlan.name,
+          credits: selectedPlan.credits,
+          price: selectedPlan.price,
+          nodes: selectedPlan.nodes
+        }, "monthly");
+        alert(`Successfully subscribed to ${selectedPlan.name}! Your plan is active for 1 month.`);
+      } else {
+        await addCredits(user.uid, selectedPkg.credits, "purchase", `Purchased ${selectedPkg.credits} credits`);
+        alert(`Successfully added ${selectedPkg.credits} credits to your account!`);
+      }
+      router.push("/dashboard/credits");
+    } catch (error) {
+      console.error("Failed to process:", error);
+      alert("Failed to process. Please try again.");
+    } finally {
+      setProcessing(false);
+    }
   };
+
+  if (isFreePlan) {
+    return (
+      <div className="max-w-6xl mx-auto px-10 py-12">
+        <div className="mb-10 flex items-center justify-between">
+          <div>
+            <h1 className="text-[28px] font-extrabold text-[#F0F0F0] tracking-tight mb-2">Subscribe to Free Plan</h1>
+            <p className="text-on-surface-variant font-mono text-xs uppercase tracking-widest flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-success"></span>
+              No Payment Required
+            </p>
+          </div>
+          <Link href="/dashboard/credits" className="text-sm font-medium text-outline flex items-center gap-1 hover:text-on-surface transition-colors">
+            <span className="material-symbols-outlined text-base">arrow_back</span>
+            Back to Billing
+          </Link>
+        </div>
+
+        <div className="bg-surface-container-high rounded-xl p-8 max-w-xl">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center">
+              <span className="material-symbols-outlined text-success text-3xl">check_circle</span>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-[#F0F0F0]">{selectedPlan?.name || "Free Plan"}</h3>
+              <p className="text-sm text-on-surface-variant">{selectedPlan?.credits || 0} credits • {selectedPlan?.nodes || 3} devices</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 mb-8">
+            <div className="flex justify-between text-sm">
+              <span className="text-on-surface-variant">Plan Price</span>
+              <span className="font-mono text-success">Free</span>
+            </div>
+            <div className="h-px bg-outline-variant opacity-20"></div>
+            <div className="flex justify-between items-center">
+              <span className="text-base font-bold text-white">Total Due</span>
+              <span className="text-2xl font-black text-success">FREE</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleSubmit}
+            disabled={processing}
+            className="w-full bg-success text-[#003739] font-black py-4 rounded-lg shadow-lg hover:brightness-110 active:scale-[0.98] transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {processing ? "Processing..." : "Activate Free Plan"}
+          </button>
+
+          <p className="text-xs text-on-surface-variant text-center mt-4">
+            This plan renews automatically every month. Cancel anytime.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-10 py-12">
         {/* Header Section */}
         <div className="mb-10 flex items-center justify-between">
           <div>
-            <h1 className="text-[28px] font-extrabold text-[#F0F0F0] tracking-tight mb-2">Checkout</h1>
+            <h1 className="text-[28px] font-extrabold text-[#F0F0F0] tracking-tight mb-2">
+              {needsPayment ? "Checkout" : "Subscribe"}
+            </h1>
             <p className="text-on-surface-variant font-mono text-xs uppercase tracking-widest flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-primary"></span>
-              Secure Transaction - Encrypted Channel
+              <span className={`w-2 h-2 rounded-full ${needsPayment ? 'bg-primary' : 'bg-success'}`}></span>
+              {needsPayment ? "Secure Transaction - Encrypted Channel" : "Free Plan Activation"}
             </p>
           </div>
           <Link href="/dashboard/credits" className="text-sm font-medium text-outline flex items-center gap-1 hover:text-on-surface transition-colors">
@@ -151,14 +240,24 @@ export default function PaymentPage() {
               {/* Package Details */}
               <div className="bg-surface-container-lowest rounded-lg p-5 mb-8 border-l-2 border-primary">
                 <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-mono text-primary uppercase">Active Selection</span>
-                  {selectedPkg.name === "Popular" && (
+                  <span className="text-xs font-mono text-primary uppercase">
+                    {isSubscription ? "Monthly Subscription" : "Credit Package"}
+                  </span>
+                  {selectedPlan?.popular && (
                     <span className="text-[10px] bg-primary-container text-on-primary-container px-2 py-0.5 rounded font-bold">POPULAR</span>
                   )}
                 </div>
-                <h4 className="text-lg font-bold text-[#F0F0F0]">{selectedPkg.name} Pack - {selectedPkg.credits} Credits</h4>
-                <p className="text-xs text-on-surface-variant mt-1">High-density remote debugging & cloud execution hours.</p>
-                <div className="mt-4 text-2xl font-black text-white">${selectedPkg.price}</div>
+                <h4 className="text-lg font-bold text-[#F0F0F0]">
+                  {selectedPkg.name} {isSubscription ? "Plan" : "Pack"} - {selectedPkg.credits} Credits
+                </h4>
+                <p className="text-xs text-on-surface-variant mt-1">
+                  {isSubscription 
+                    ? `Monthly plan with ${selectedPkg.credits} credits. Auto-renews every 30 days.`
+                    : "High-density remote debugging & cloud execution hours."}
+                </p>
+                <div className="mt-4 text-2xl font-black text-white">${selectedPkg.price}
+                  {isSubscription && <span className="text-sm font-normal text-on-surface-variant">/month</span>}
+                </div>
               </div>
 
               {/* Calculations */}
@@ -174,18 +273,31 @@ export default function PaymentPage() {
                 <div className="h-px bg-outline-variant opacity-20 my-2"></div>
                 <div className="flex justify-between items-center pt-2">
                   <span className="text-base font-bold text-white uppercase tracking-tighter">Total Due</span>
-                  <span className="text-2xl font-black text-primary">${selectedPkg.price}</span>
+                  <span className="text-2xl font-black text-primary">${selectedPkg.price}{isSubscription && <span className="text-sm font-normal">/mo</span>}</span>
                 </div>
+                {isSubscription && (
+                  <div className="flex items-center gap-2 text-xs text-success mt-2">
+                    <span className="material-symbols-outlined text-sm">autorenew</span>
+                    Auto-renews every 30 days. Cancel anytime.
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
               <div className="space-y-4">
                 <button
                   onClick={handleSubmit}
-                  className="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary-fixed font-black py-4 rounded-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2"
+                  disabled={processing}
+                  className="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary-fixed font-black py-4 rounded-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Complete Payment
-                  <span className="material-symbols-outlined text-lg">lock</span>
+                  {processing ? (
+                    <>Processing...</>
+                  ) : (
+                    <>
+                      Complete Payment
+                      <span className="material-symbols-outlined text-lg">lock</span>
+                    </>
+                  )}
                 </button>
                 <Link href="/dashboard/credits" className="w-full py-2 text-xs font-medium text-[#A0A0A0] hover:text-white transition-colors flex items-center justify-center gap-1 group">
                   Cancel and go back

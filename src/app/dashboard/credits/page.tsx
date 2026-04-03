@@ -12,6 +12,8 @@ const defaultCreditPackages = [
     name: "Starter",
     credits: 50,
     price: 2.99,
+    nodes: 10,
+    maxSharedUsers: 3,
     icon: "potted_plant",
     popular: false,
   },
@@ -19,6 +21,8 @@ const defaultCreditPackages = [
     name: "Popular",
     credits: 200,
     price: 9.99,
+    nodes: -1,
+    maxSharedUsers: 10,
     icon: "electric_bolt",
     popular: true,
   },
@@ -26,6 +30,8 @@ const defaultCreditPackages = [
     name: "Pro",
     credits: 500,
     price: 19.99,
+    nodes: -1,
+    maxSharedUsers: -1,
     icon: "rocket_launch",
     popular: false,
   },
@@ -33,7 +39,7 @@ const defaultCreditPackages = [
 
 export default function CreditsPage() {
   const { user } = useAuth();
-  const { credits, loading: profileLoading } = useUserProfile(user?.uid);
+  const { profile, credits, loading: profileLoading } = useUserProfile(user?.uid);
   const { plans, loading: plansLoading } = usePlans();
   const { transactions, loading: transactionsLoading } = useCreditTransactions(user?.uid);
   const [creditPackages, setCreditPackages] = useState(defaultCreditPackages);
@@ -43,9 +49,12 @@ export default function CreditsPage() {
       const packages = plans
         .filter((p: any) => p.active)
         .map((p: any) => ({
+          id: p.id,
           name: p.name.replace(" Tier", ""),
           credits: p.credits,
           price: p.price,
+          nodes: p.nodes,
+          maxSharedUsers: p.maxSharedUsers,
           icon: p.popular ? "electric_bolt" : "potted_plant",
           popular: p.popular || false,
         }));
@@ -58,6 +67,7 @@ export default function CreditsPage() {
   const formatDate = (date: any) => {
     if (!date) return "N/A";
     if (date.toDate) return date.toDate().toLocaleDateString();
+    if (date.seconds) return new Date(date.seconds * 1000).toLocaleDateString();
     return new Date(date).toLocaleDateString();
   };
 
@@ -105,11 +115,46 @@ export default function CreditsPage() {
                 {profileLoading ? "..." : credits} <span className="text-xl font-normal opacity-70">Credits</span>
               </div>
             </div>
-            <Link href="/dashboard/payment" className="px-8 py-3 rounded-lg border-2 border-white text-white font-bold uppercase tracking-widest text-xs hover:bg-white hover:text-[#007A80] transition-all duration-300 transform active:scale-95 shadow-lg">
-              Buy More Credits
-            </Link>
+              <Link 
+                href={`/dashboard/payment?package=${creditPackages.find(p => p.popular)?.name.toLowerCase() || 'popular'}&type=subscription`} 
+                className="px-8 py-3 rounded-lg border-2 border-white text-white font-bold uppercase tracking-widest text-xs hover:bg-white hover:text-[#007A80] transition-all duration-300 transform active:scale-95 shadow-lg"
+              >
+                Subscribe
+              </Link>
           </div>
         </section>
+
+        {/* Active Plan Section */}
+        {profile?.plan && profile.plan !== "free" && (
+          <section className="bg-surface-container-high rounded-xl p-6 border border-primary/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <span className="material-symbols-outlined text-primary">workspace_premium</span>
+                </div>
+                <div>
+                  <p className="text-[10px] font-mono uppercase tracking-wider text-primary">Active Plan</p>
+                  <h4 className="text-lg font-bold text-[#F0F0F0]">{profile.plan}</h4>
+                  <p className="text-xs text-on-surface-variant">
+                    {profile.planStartDate && (
+                      <>Started: {formatDate(profile.planStartDate)}</>
+                    )}
+                    {profile.planEndDate && (
+                      <> • Expires: {formatDate(profile.planEndDate)}</>
+                    )}
+                    {profile.autoRenew && (
+                      <span className="text-success ml-2">• Auto-renew enabled</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-on-surface-variant">Device Quota</p>
+                <p className="text-2xl font-bold text-[#F0F0F0]">{profile.deviceQuota || "Unlimited"}</p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Usage History Section */}
         <section>
@@ -184,14 +229,18 @@ export default function CreditsPage() {
                 </div>
                 <h4 className="text-xl font-bold text-[#F0F0F0]">{pkg.name}</h4>
                 <p className={`text-sm mt-2 font-mono ${pkg.popular ? 'text-primary' : 'text-on-surface-variant'}`}>{pkg.credits} CREDITS</p>
-                <div className="my-8">
+                <div className="mt-4 space-y-1 text-xs text-on-surface-variant">
+                  <p>{pkg.nodes === -1 ? "Unlimited" : pkg.nodes} Devices</p>
+                  <p>{pkg.maxSharedUsers === -1 ? "Unlimited" : pkg.maxSharedUsers} Shared Users</p>
+                </div>
+                <div className="my-4">
                   <span className="text-4xl font-black text-[#F0F0F0]">${pkg.price}</span>
                 </div>
                 <Link 
-                  href={`/dashboard/payment?package=${pkg.name.toLowerCase()}`}
+                  href={`/dashboard/payment?package=${pkg.name.toLowerCase()}&type=subscription`}
                   className={`w-full py-3 rounded font-bold uppercase tracking-widest text-xs hover:brightness-110 transition-all transform active:scale-95 ${pkg.popular ? 'bg-primary text-on-primary shadow-[0_0_20px_rgba(103,215,221,0.3)]' : 'bg-primary-container text-on-primary-container'}`}
                 >
-                  Buy Now
+                  Subscribe (1 Month)
                 </Link>
               </div>
             ))}

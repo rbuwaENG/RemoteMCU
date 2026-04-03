@@ -20,13 +20,16 @@ export const useUserProfile = (uid: string | undefined) => {
     const unsubscribe = onSnapshot(userRef, 
       (docSnap) => {
         if (docSnap.exists()) {
-          setProfile({ uid: docSnap.id, ...docSnap.data() } as UserProfile);
+          const newProfile = { uid: docSnap.id, ...docSnap.data() } as UserProfile;
+          console.log("User profile updated:", newProfile.credits);
+          setProfile(newProfile);
         } else {
           setProfile(null);
         }
         setLoading(false);
       },
       (err) => {
+        console.error("Error fetching user profile:", err);
         setError(err.message);
         setLoading(false);
       }

@@ -1,9 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteContent } from "@/lib/hooks/useSiteContent";
+import { useUserProfile } from "@/lib/hooks/useUserProfile";
+import { useNotifications } from "@/lib/hooks/useNotifications";
+import { usePersistentNotifications } from "@/lib/hooks/usePersistentNotifications";
+import CreditBurnBar from "./CreditBurnBar";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -13,6 +18,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const { user, logout, isAdmin } = useAuth();
   const { siteName } = useSiteContent();
+  const { profile } = useUserProfile(user?.uid);
+  const { notifications, notificationHistory, clearHistory } = useNotifications();
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Initialize persistent notifications listener
+  usePersistentNotifications(user?.uid);
 
   const sidebarLinks = [
     { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
@@ -134,15 +145,54 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <Link href="/about" className="text-neutral-400 hover:text-[#F0F0F0] text-sm font-medium transition-colors">About Us</Link>
             <Link href="/support" className="text-neutral-400 hover:text-[#F0F0F0] text-sm font-medium transition-colors">Support</Link>
           </nav>
-          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/10">
               <span className="text-[#FFC107] text-xs">⚡</span>
-              <span className="text-white text-xs font-bold tracking-tight">10 Credits</span>
+              <span className="text-white text-xs font-bold tracking-tight">{profile?.credits ?? 0} Credits</span>
             </div>
-            <button className="p-2 text-neutral-400 hover:text-primary transition-colors relative">
-              <span className="material-symbols-outlined">notifications</span>
-              <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-[#67d7dd] rounded-full border border-[#131313]"></span>
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="p-2 text-neutral-400 hover:text-primary transition-colors relative"
+              >
+                <span className="material-symbols-outlined">notifications</span>
+                {notifications.length > 0 && (
+                  <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-[#67d7dd] rounded-full border border-[#131313]"></span>
+                )}
+              </button>
+              {showNotifications && (
+                <div className="absolute right-0 top-10 w-80 bg-[#1E1E1E] border border-[#3C3C3C] rounded-lg shadow-xl z-50 overflow-hidden">
+                  <div className="p-3 border-b border-[#3C3C3C] flex items-center justify-between">
+                    <span className="font-bold text-sm">Notifications</span>
+                    {notificationHistory.length > 0 && (
+                      <button 
+                        onClick={() => clearHistory()}
+                        className="text-xs text-neutral-400 hover:text-white"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {notificationHistory.length === 0 ? (
+                      <p className="p-4 text-center text-on-surface-variant text-sm">No notifications</p>
+                    ) : (
+                      notificationHistory.map((notif) => (
+                        <div key={notif.id} className="p-3 border-b border-[#3C3C3C]/50 hover:bg-surface-container-high">
+                          <p className="text-sm font-medium text-on-surface">{notif.title}</p>
+                          {notif.message && (
+                            <p className="text-xs text-on-surface-variant mt-1">{notif.message}</p>
+                          )}
+                          <p className="text-xs text-neutral-500 mt-1">
+                            {notif.timestamp.toLocaleTimeString()}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 cursor-pointer">
               {user?.photoURL ? (
                 <img alt="User" className="w-full h-full object-cover" src={user.photoURL} />
@@ -162,11 +212,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       {/* FAB */}
-      <div className="fixed bottom-8 right-8 z-[100]">
-        <button className="w-14 h-14 bg-[#67d7dd] text-[#003739] rounded-sm shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all">
-          <span className="material-symbols-outlined text-3xl">bolt</span>
-        </button>
-      </div>
+      <CreditBurnBar />
     </div>
   );
 }

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { validateShareKey, redeemShareKey } from "@/lib/firestore/shareKeys";
-import { addSharedUser } from "@/lib/firestore/devices";
-import { getDevice } from "@/lib/firestore/devices";
+import { addSharedUser, getDevice } from "@/lib/firestore/devices";
+import { useNotifications } from "@/lib/hooks/useNotifications";
 
 interface LinkDeviceModalProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ interface LinkDeviceModalProps {
 
 export default function LinkDeviceModal({ isOpen, onClose, onDeviceLinked }: LinkDeviceModalProps) {
   const { user } = useAuth();
+  const { addNotification } = useNotifications();
   const [shareKey, setShareKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,11 +58,48 @@ export default function LinkDeviceModal({ isOpen, onClose, onDeviceLinked }: Lin
         return;
       }
 
-      await addSharedUser(keyData.deviceId, user.uid);
-      await redeemShareKey(keyData.id!, user.uid);
+      const result = await addSharedUser(keyData.deviceId, user.uid);
+      console.log("addSharedUser result:", result);
+      if (!result.success) {
+        setError(result.message || "Failed to add shared user");
+        addNotification("error", "Cannot Link Device", result.message || "Failed to add shared user");
+        return;
+      }
+      
+      console.log("Calling redeemShareKey with:", keyData.id, user.uid);
+      try {
+        await redeemShareKey(keyData.id!, user.uid);
+        console.log("redeemShareKey completed");
+      } catch (redeemErr: any) {
+        console.error("redeemShareKey failed:", redeemErr);
+        console.error("Error code:", redeemErr?.code);
+        console.error("Error message:", redeemErr?.message);
+        
+        // Check if it's a permission error
+        if (redeemErr?.code === 'permission-denied') {
+          // Still mark as success since addSharedUser worked
+          addNotification("success", "Device Linked", `Successfully linked ${device.name}`);
+          setSuccess(true);
+          onDeviceLinked?.(device.name);
+          setTimeout(() => {
+            handleClose();
+          }, 2000);
+          return;
+        }
+        
+        setError("Failed to redeem share key. Please try again.");
+        return;
+      }
 
+      // Success - device linked
+      console.log("Device linked successfully, showing notification");
+      console.log("Device name:", device.name);
+      addNotification("success", "Device Linked", `Successfully linked ${device.name}`);
+      console.log("Notification added");
       setSuccess(true);
+      console.log("setSuccess(true) called");
       onDeviceLinked?.(device.name);
+      console.log("onDeviceLinked callback called");
       
       setTimeout(() => {
         handleClose();
