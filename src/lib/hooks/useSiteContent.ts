@@ -4,6 +4,7 @@ import { db } from "@/lib/firebase";
 import { SiteContent } from "@/lib/firestore/content";
 
 const defaultContent: SiteContent = {
+  siteName: "Remote MCU",
   hero: {
     title: "Remote MCU - Remote Microcontroller Development",
     subtext: "Connect, program, and debug your microcontrollers from anywhere in the world."
@@ -46,6 +47,7 @@ export const useSiteContent = () => {
           setContent({
             ...defaultContent,
             ...data,
+            siteName: data.siteName || defaultContent.siteName,
             architects: (data.architects || defaultContent.architects).map(a => ({ ...a, image: a.image || "" })),
             features: data.features || defaultContent.features,
             hero: data.hero || defaultContent.hero,
@@ -66,6 +68,7 @@ export const useSiteContent = () => {
 
   return {
     content,
+    siteName: content.siteName,
     hero: content.hero,
     features: content.features,
     about: content.about,
