@@ -13,10 +13,11 @@ import {
   onSnapshot,
   Unsubscribe,
   serverTimestamp,
-  increment
+  increment,
+  addDoc,
+  Timestamp
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { addDoc } from "firebase/firestore";
 import { burnCredits } from "./credits";
 
 async function addPersistentNotification(userId: string, title: string, message: string, type: "info" | "warning" | "error" | "success" = "info") {
@@ -200,17 +201,32 @@ export const addSharedUser = async (deviceId: string, userId: string): Promise<{
     const sessionHours = Math.max(1, device.sessionDurationMinutes ? device.sessionDurationMinutes / 60 : 1);
     const creditsToBurn = Math.ceil(sessionHours); // Round up to nearest whole credit
     try {
+      // 1. Charge the owner
       await burnCredits(
-        userId, // CHARGE GUEST
+        device.ownerId, // CHARGE OWNER
         creditsToBurn, 
         deviceId, 
         device.name || 'Unknown Device', 
-        `Remote Session Access (${device.sessionDurationMinutes} min limit)`
+        `Shared session created (${device.sessionDurationMinutes} min limit)`
       );
-      console.log(`Burned ${creditsToBurn} credits for guest: ${userId}`);
+      console.log(`Burned ${creditsToBurn} credits from owner: ${device.ownerId}`);
+
+      // 2. Add a receipt for the Guest (0 credits) so they see it in their log
+      const transactionsRef = collection(db, "creditTransactions");
+      await addDoc(transactionsRef, {
+        userId: userId, // Log for the Guest
+        deviceId,
+        deviceName: device.name || 'Unknown Device',
+        action: `Joined shared session (${device.sessionDurationMinutes} min limit)`,
+        credits: 0,
+        type: "burn",
+        createdAt: Timestamp.now()
+      });
+      console.log(`Added log entry for guest: ${userId}`);
+
     } catch (burnError) {
-      console.error("Failed to burn credits for guest:", burnError);
-      // Don't fail the whole operation if credit burning fails
+      console.error("Failed to burn credits from owner or log for guest:", burnError);
+      // Don't fail the whole operation if credit burning/logging fails
     }
     
     console.log("Device updated with shared user");

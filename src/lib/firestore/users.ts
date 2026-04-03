@@ -96,6 +96,31 @@ export const applyPlan = async (
   billingCycle: "monthly" | "yearly" = "monthly"
 ): Promise<void> => {
   const userRef = doc(db, "users", uid);
+  const userSnap = await getDoc(userRef);
+  
+  if (userSnap.exists()) {
+    const currentProfile = userSnap.data() as UserProfile;
+    
+    // Check if the user is already on the Free plan and trying to renew too early
+    const isFreePlan = plan.price === 0 || plan.id.toLowerCase() === 'free';
+    const isAlreadyFree = currentProfile.plan?.toLowerCase() === 'free';
+    
+    if (isFreePlan && isAlreadyFree && currentProfile.planStartDate) {
+      const startDate = currentProfile.planStartDate.toDate 
+        ? currentProfile.planStartDate.toDate() 
+        : new Date(currentProfile.planStartDate);
+        
+      const now = new Date();
+      const diffMs = now.getTime() - startDate.getTime();
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      
+      if (diffDays < 30) {
+        const nextRenewalDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+        throw new Error(`You can only renew the Free Plan once every 30 days. Your next renewal is available on ${nextRenewalDate.toLocaleDateString()}.`);
+      }
+    }
+  }
+
   const now = new Date();
   const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   

@@ -16,7 +16,8 @@ export default function DashboardPage() {
 
   const currentPlan = plans.find((p: any) => p.id === planId || p.name.toLowerCase().replace(" ", "-") === planId?.toLowerCase());
   const planName = currentPlan?.name || planId?.charAt(0).toUpperCase() + planId?.slice(1) || "Free";
-  const maxDevices = currentPlan?.nodes === -1 ? "Unlimited" : (currentPlan?.nodes || deviceQuota || 3);
+  const maxDevicesNum = currentPlan?.nodes === -1 ? Infinity : (currentPlan?.nodes || deviceQuota || 3);
+  const maxDevicesStr = maxDevicesNum === Infinity ? "Unlimited" : maxDevicesNum;
 
   return (
     <>
@@ -142,31 +143,31 @@ export default function DashboardPage() {
             {totalDevices > 0 ? "Real-time serial output will appear here when devices are connected..." : "Waiting for device connection..."}
           </div>
         </div>
-        <div className="bg-white/5 rounded-sm p-10 flex flex-col justify-between border border-white/5 relative">
+        <div className="bg-white/5 rounded-sm p-10 flex flex-col justify-between border border-white/5 relative group">
           <div>
             <h4 className="text-[10px] font-mono tracking-[0.2em] text-[#67d7dd] uppercase mb-8">Plan Status</h4>
             <p className="text-on-surface text-lg font-medium leading-relaxed mb-8">
               Your current plan is <span className="text-primary font-bold">{plansLoading ? "..." : planName}</span>.
-              {maxDevices !== "Unlimited" ? (
-                <> You have used {totalDevices} out of {maxDevices} device slots.</>
+              {maxDevicesNum !== Infinity ? (
+                <> You have used <span className="text-[#67d7dd] font-black">{totalDevices}</span> out of <span className="text-[#67d7dd] font-black">{maxDevicesStr}</span> device slots.</>
               ) : (
                 <> You have unlimited device slots.</>
               )}
             </p>
-            {maxDevices !== "Unlimited" && (
-              <div className="w-full bg-background/50 rounded-full h-1.5 mb-10 overflow-hidden">
-                <div className="bg-primary/20 h-1.5 rounded-full" style={{ width: `${Math.min((totalDevices / (maxDevices === "Unlimited" ? 1 : maxDevices as number)) * 100, 100)}%` }}></div>
+            {maxDevicesNum !== Infinity && (
+              <div className="w-full bg-white/5 rounded-full h-2 mb-10 overflow-hidden border border-white/5">
+                <div 
+                  className="bg-[#67d7dd] h-full rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(103,215,221,0.3)]" 
+                  style={{ width: `${Math.min((totalDevices / (maxDevicesNum as number)) * 100, 100)}%` }}
+                ></div>
               </div>
             )}
           </div>
-          <Link href="/dashboard/credits" className="w-full py-3 border border-primary/20 text-primary text-[10px] font-mono tracking-widest uppercase hover:bg-primary/5 transition-colors rounded-sm flex items-center justify-center">
+          <Link href="/dashboard/credits" className="w-full py-4 bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase hover:bg-primary/20 transition-all rounded flex items-center justify-center border border-primary/20">
             Upgrade Capacity
           </Link>
-          <div className="absolute -top-4 -right-4 w-12 h-12 bg-[#67d7dd] rounded-sm shadow-lg flex items-center justify-center">
-            <span className="material-symbols-outlined text-[#003739]">bolt</span>
-          </div>
-          <div className="absolute bottom-24 right-4 w-12 h-12 bg-[#67d7dd] rounded-sm shadow-lg flex items-center justify-center">
-            <span className="material-symbols-outlined text-[#003739]">bolt</span>
+          <div className="absolute top-0 right-0 w-12 h-12 bg-[#67d7dd] rounded-sm shadow-xl flex items-center justify-center rotate-3 group-hover:rotate-12 transition-transform translate-x-2 -translate-y-2">
+            <span className="material-symbols-outlined text-[#003739] text-3xl">bolt</span>
           </div>
         </div>
       </section>

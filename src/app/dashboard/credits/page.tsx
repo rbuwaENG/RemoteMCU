@@ -41,7 +41,7 @@ export default function CreditsPage() {
   const { user } = useAuth();
   const { profile, credits, loading: profileLoading } = useUserProfile(user?.uid);
   const { plans, loading: plansLoading } = usePlans();
-  const { transactions, loading: transactionsLoading } = useCreditTransactions(user?.uid);
+  const { transactions, loading: transactionsLoading, error: transactionsError } = useCreditTransactions(user?.uid);
   const [creditPackages, setCreditPackages] = useState(defaultCreditPackages);
 
   useEffect(() => {
@@ -159,14 +159,14 @@ export default function CreditsPage() {
         {/* Usage History Section */}
         <section>
           <div className="flex items-center gap-4 mb-6">
-            <h3 className="text-lg font-semibold tracking-tight">Recent Activity</h3>
+            <h3 className="text-lg font-semibold tracking-tight text-[#F0F0F0]">Recent Activity</h3>
             <div className="h-px flex-1 bg-outline-variant/10"></div>
           </div>
-          <div className="bg-surface-container-high rounded-xl overflow-hidden shadow-2xl">
-            <div className="overflow-x-auto">
+          <div className="bg-surface-container-high rounded-xl shadow-2xl border border-outline-variant/10 overflow-hidden">
+            <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
               <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-surface-container-highest/50 border-b border-outline-variant/15">
+                <thead className="sticky top-0 bg-[#2D2D2D] z-10 shadow-sm border-b border-outline-variant/15">
+                  <tr className="bg-surface-container-highest/50">
                     <th className="px-6 py-4 font-mono text-[10px] uppercase tracking-widest text-on-surface-variant/80">Date</th>
                     <th className="px-6 py-4 font-mono text-[10px] uppercase tracking-widest text-on-surface-variant/80">Device</th>
                     <th className="px-6 py-4 font-mono text-[10px] uppercase tracking-widest text-on-surface-variant/80">Action</th>
@@ -176,11 +176,31 @@ export default function CreditsPage() {
                 <tbody className="divide-y divide-outline-variant/10">
                   {transactionsLoading ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-8 text-center text-on-surface-variant">Loading...</td>
+                      <td colSpan={4} className="px-6 py-8 text-center text-on-surface-variant animate-pulse tracking-wide">Loading activity log...</td>
+                    </tr>
+                  ) : transactionsError ? (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-12 text-center text-primary/80">
+                        <div className="flex flex-col items-center gap-3">
+                          <span className="material-symbols-outlined text-4xl">warning</span>
+                          <div className="space-y-1">
+                            <p className="font-bold text-sm">Action Required: Database Index Missing</p>
+                            <p className="text-[11px] max-w-md mx-auto opacity-70 leading-relaxed">
+                              Firestore requires a composite index for this view. Please check your browser console for the direct link to create it, or ensure your rules allow read access.
+                            </p>
+                          </div>
+                          <p className="text-[10px] font-mono bg-black/30 px-2 py-1 rounded select-all">{transactionsError}</p>
+                        </div>
+                      </td>
                     </tr>
                   ) : transactions.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-8 text-center text-on-surface-variant">No recent activity</td>
+                      <td colSpan={4} className="px-6 py-10 text-center text-on-surface-variant">
+                        <div className="flex flex-col items-center gap-2 opacity-50">
+                          <span className="material-symbols-outlined text-3xl">history</span>
+                          <p className="text-xs">No recent transaction history found</p>
+                        </div>
+                      </td>
                     </tr>
                   ) : (
                     transactions.map((tx) => (

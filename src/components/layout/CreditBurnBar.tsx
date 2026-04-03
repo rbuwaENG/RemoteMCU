@@ -13,6 +13,16 @@ const getTxDate = (createdAt: any): Date => {
   return new Date(createdAt);
 };
 
+const getMaxCredits = (plan: string): number => {
+  switch (plan?.toLowerCase()) {
+    case "free": return 25;
+    case "starter": return 50;
+    case "popular": return 200;
+    case "pro": return 500;
+    default: return 25;
+  }
+};
+
 export default function CreditBurnBar() {
   const { user } = useAuth();
   const { profile } = useUserProfile(user?.uid);
@@ -23,6 +33,8 @@ export default function CreditBurnBar() {
 
   const credits = profile?.credits || 0;
   const plan = profile?.plan || "free";
+  const maxCredits = getMaxCredits(plan);
+  const creditPercentage = Math.min(100, (credits / maxCredits) * 100);
 
   useEffect(() => {
     if (transactions.length > 0 && user) {
@@ -79,65 +91,81 @@ export default function CreditBurnBar() {
   if (!user) return null;
 
   return (
-    <div className="fixed bottom-8 right-8 z-[100] flex flex-col items-end gap-3">
+    <div className="fixed bottom-8 right-8 z-[100] flex flex-col items-end gap-3 scale-90 sm:scale-100">
       {isVisible && (
         <div 
-          className={`bg-[#1E1E1E] border border-[#3C3C3C] rounded-lg shadow-2xl overflow-hidden transition-all duration-300 ${
+          className={`bg-[#1E1E1E] border border-[#3C3C3C] rounded-lg shadow-2xl overflow-hidden transition-all duration-300 origin-bottom-right ${
             isOpen 
-              ? "w-64 opacity-100 translate-y-0" 
-              : "w-64 opacity-0 translate-y-4"
+              ? "w-72 opacity-100 translate-y-0 scale-100" 
+              : "w-72 opacity-0 translate-y-4 scale-95"
           }`}
         >
           <div className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[#67d7dd]">Credit Burn Rate</span>
-              <span className="material-symbols-outlined text-[#67d7dd] text-sm">local_fire_department</span>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#67d7dd] text-lg">monitoring</span>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#67d7dd]">Credit Burn Rate</span>
+              </div>
+              <button onClick={() => setIsOpen(false)} className="text-on-surface-variant hover:text-white transition-colors">
+                 <span className="material-symbols-outlined text-sm">close</span>
+              </button>
             </div>
             
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-on-surface-variant">Current Balance</span>
-                <span className="text-sm font-bold text-[#F0F0F0]">{credits} credits</span>
+                <span className="text-sm font-black text-[#F0F0F0] tracking-tight">{credits} credits</span>
               </div>
               
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-on-surface-variant">Current Plan</span>
-                <span className="text-[11px] font-bold text-primary uppercase">{plan}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded uppercase tracking-widest">{plan}</span>
               </div>
 
-              <div className="border-t border-[#3C3C3C] pt-3 mt-3">
+              <div className="bg-surface-container-low rounded-lg p-3 mt-4 border border-[#3C3C3C]">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] text-on-surface-variant">Burn Rate</span>
+                  <span className="text-[10px] text-on-surface-variant font-medium">Usage Level</span>
                   <span className="text-[10px] font-mono text-orange-400">
                     {burnRate > 0 ? `~${burnRate} credits/hr` : "No recent activity"}
                   </span>
                 </div>
                 
-                <div className="w-full h-1.5 bg-surface-container-lowest rounded-full overflow-hidden">
+                {/* Gauge Progress Bar */}
+                <div className="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden border border-black/20">
                   <div 
-                    className={`h-full rounded-full transition-all ${burnRate > 0 ? "bg-gradient-to-r from-orange-500 to-red-500 animate-pulse" : "bg-gray-600"}`}
-                    style={{ width: burnRate > 0 ? `${Math.min(100, (burnRate / 10) * 100)}%` : "30%" }}
+                    className={`h-full rounded-full transition-all duration-1000 ease-out ${
+                      creditPercentage > 50 ? "bg-gradient-to-r from-success to-primary" : 
+                      creditPercentage > 20 ? "bg-gradient-to-r from-orange-400 to-orange-600" :
+                      "bg-gradient-to-r from-red-500 to-red-700 animate-pulse"
+                    }`}
+                    style={{ width: `${creditPercentage}%` }}
                   ></div>
                 </div>
                 
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-[9px] text-on-surface-variant/60">Session Time</span>
-                  <span className="text-[9px] text-on-surface-variant/60">
-                    {estimatedMinutes > 0 ? `Est. ${estimatedMinutes} min` : "N/A"}
-                  </span>
+                <div className="flex justify-between items-center mt-3">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] uppercase tracking-tighter text-on-surface-variant/60">Session Time</span>
+                    <span className="text-[11px] font-bold text-[#F0F0F0]">
+                      {estimatedMinutes > 0 ? `Est. ${estimatedMinutes} min` : "N/A"}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] uppercase tracking-tighter text-on-surface-variant/60">Capacity</span>
+                    <span className="block text-[11px] font-bold text-[#F0F0F0]">{Math.round(creditPercentage)}%</span>
+                  </div>
                 </div>
               </div>
 
               <div className="pt-2">
                 <Link 
                   href="/dashboard/credits"
-                  className="flex items-center justify-center w-full py-2 bg-primary/10 text-primary text-[10px] font-bold rounded hover:bg-primary/20 transition-colors"
+                  className="flex items-center justify-center w-full py-2.5 bg-primary text-on-primary text-[10px] font-black rounded hover:brightness-110 active:scale-[0.98] transition-all uppercase tracking-widest shadow-lg shadow-primary/10"
                 >
-                  Add Credits
+                  Top Up Credits
                 </Link>
-                <div className="flex items-center gap-2 text-[9px] text-on-surface-variant mt-2 justify-center">
-                  <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>
-                  <span>Live tracking active</span>
+                <div className="flex items-center gap-2 text-[9px] text-on-surface-variant mt-3 justify-center">
+                  <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></div>
+                  <span className="font-mono">Live tracking active</span>
                 </div>
               </div>
             </div>
@@ -145,13 +173,21 @@ export default function CreditBurnBar() {
         </div>
       )}
 
+      {/* Premium Floating Button */}
       <button 
         onClick={handleToggle}
-        className={`w-14 h-14 bg-[#67d7dd] text-[#003739] rounded-sm shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all ${
-          isOpen ? "bg-[#4fb8be]" : ""
+        className={`w-14 h-14 bg-[#67d7dd] text-[#003739] rounded-lg shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all group relative border-b-4 border-[#00979D] ${
+          isOpen ? "translate-y-1 border-b-0" : ""
         }`}
       >
-        <span className="material-symbols-outlined text-3xl animate-bounce">bolt</span>
+        <span className={`material-symbols-outlined text-3xl transition-transform duration-500 ${isOpen ? 'rotate-180' : 'rotate-0'}`}>
+          {isOpen ? 'close' : 'bolt'}
+        </span>
+        {!isOpen && (
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-[8px] font-bold text-on-primary rounded-full flex items-center justify-center animate-bounce shadow-lg">
+            !
+          </span>
+        )}
       </button>
     </div>
   );

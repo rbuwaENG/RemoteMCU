@@ -151,30 +151,8 @@ export const redeemShareKey = async (keyId: string, userId: string): Promise<voi
     const deviceId = keyData.deviceId;
     const ownerId = keyData.ownerId;
     
-    // Get device info to burn credits
-    const deviceRef = doc(db, "devices", deviceId);
-    const deviceSnap = await getDoc(deviceRef);
-    if (deviceSnap.exists()) {
-      const deviceData = deviceSnap.data();
-      // Burn credits for creating a shared session via share key
-      // 1 credit per hour of session time (minimum 1 credit)
-      const sessionHours = Math.max(1, deviceData.sessionDurationMinutes ? deviceData.sessionDurationMinutes / 60 : 1);
-      const creditsToBurn = Math.ceil(sessionHours); // Round up to nearest whole credit
-      
-      try {
-        await burnCredits(
-          userId, // CHARGE REDEEMER (Guest)
-          creditsToBurn, 
-          deviceId, 
-          deviceData.name || 'Unknown Device', 
-          `Remote Session Access (${deviceData.sessionDurationMinutes} min limit)`
-        );
-        console.log(`Burned ${creditsToBurn} credits for guest: ${userId}`);
-      } catch (burnError) {
-        console.error("Failed to burn credits for guest:", burnError);
-        // Don't fail the whole operation if credit burning fails
-      }
-    }
+    // Credit burning is already handled by addSharedUser if called via key redemption UI.
+    // We only update key status here.
   }
   
   await updateDoc(keyRef, {

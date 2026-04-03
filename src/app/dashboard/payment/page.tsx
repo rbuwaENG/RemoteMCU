@@ -7,12 +7,14 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { addCredits } from "@/lib/firestore/credits";
 import { applyPlan } from "@/lib/firestore/users";
 import { usePlans } from "@/lib/hooks/usePlans";
+import { useUserProfile } from "@/lib/hooks/useUserProfile";
 
 export default function PaymentPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
   const { plans, loading: plansLoading } = usePlans();
+  const { profile, loading: profileLoading } = useUserProfile(user?.uid);
   const packageName = searchParams.get("package") || "popular";
   const isSubscription = searchParams.get("type") === "subscription";
 
@@ -35,6 +37,23 @@ export default function PaymentPage() {
   const isFreePlan = selectedPlan && selectedPlan.price === 0;
   const needsPayment = !isFreePlan;
 
+  // Check if renewal is allowed for free plan
+  const canRenewFree = (() => {
+    if (!isFreePlan || !profile || profile.plan?.toLowerCase() !== 'free') return true;
+    if (!profile.planStartDate) return true;
+    
+    const startDate = profile.planStartDate.toDate ? profile.planStartDate.toDate() : new Date(profile.planStartDate);
+    const now = new Date();
+    const diffDays = (now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+    return diffDays >= 30;
+  })();
+
+  const nextRenewalDate = (() => {
+    if (canRenewFree || !profile?.planStartDate) return null;
+    const startDate = profile.planStartDate.toDate ? profile.planStartDate.toDate() : new Date(profile.planStartDate);
+    return new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+  })();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || plansLoading) return;
@@ -55,9 +74,9 @@ export default function PaymentPage() {
         alert(`Successfully added ${selectedPkg.credits} credits to your account!`);
       }
       router.push("/dashboard/credits");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to process:", error);
-      alert("Failed to process. Please try again.");
+      alert(error.message || "Failed to process. Please try again.");
     } finally {
       setProcessing(false);
     }
@@ -105,11 +124,21 @@ export default function PaymentPage() {
 
           <button
             onClick={handleSubmit}
-            disabled={processing}
+            disabled={processing || !canRenewFree}
             className="w-full bg-success text-[#003739] font-black py-4 rounded-lg shadow-lg hover:brightness-110 active:scale-[0.98] transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {processing ? "Processing..." : "Activate Free Plan"}
+            {processing ? "Processing..." : canRenewFree ? "Activate Free Plan" : "Renewal Not Available Yet"}
           </button>
+
+          {!canRenewFree && nextRenewalDate && (
+            <div className="mt-4 p-4 bg-primary/10 border border-primary/30 rounded-lg flex items-start gap-3">
+              <span className="material-symbols-outlined text-primary">info</span>
+              <p className="text-xs text-[#F0F0F0] leading-relaxed">
+                You can only renew the Free Plan once every 30 days. 
+                Your next renewal will be available on <span className="text-primary font-bold">{nextRenewalDate.toLocaleDateString()}</span>.
+              </p>
+            </div>
+          )}
 
           <p className="text-xs text-on-surface-variant text-center mt-4">
             This plan renews automatically every month. Cancel anytime.
