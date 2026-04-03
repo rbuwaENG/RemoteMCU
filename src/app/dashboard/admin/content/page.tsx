@@ -25,6 +25,9 @@ export default function ContentManagementPage() {
   const router = useRouter();
   const { content, loading: contentLoading } = useSiteContent();
   
+  const [siteData, setSiteData] = useState({
+    siteName: "Remote MCU",
+  });
   const [heroData, setHeroData] = useState({
     title: "Architecting the Future of Remote Hardware",
     subtext: "The unified platform for managing ESP32, STM32, and Arduino fleets from a single terminal interface.",
@@ -57,6 +60,9 @@ export default function ContentManagementPage() {
 
   useEffect(() => {
     if (content) {
+      setSiteData({
+        siteName: content.siteName || siteData.siteName,
+      });
       setHeroData({
         title: content.hero?.title || heroData.title,
         subtext: content.hero?.subtext || heroData.subtext,
@@ -82,6 +88,7 @@ export default function ContentManagementPage() {
     setSaving(true);
     try {
       await updateSiteContent({
+        siteName: siteData.siteName,
         hero: heroData,
         features: features,
         about: aboutData,
@@ -116,6 +123,7 @@ export default function ContentManagementPage() {
     
     try {
       await updateSiteContent({
+        siteName: siteData.siteName,
         hero: heroData,
         features: features,
         about: aboutData,
@@ -136,6 +144,7 @@ export default function ContentManagementPage() {
     
     try {
       await updateSiteContent({
+        siteName: siteData.siteName,
         hero: heroData,
         features: features,
         about: aboutData,
@@ -155,6 +164,7 @@ export default function ContentManagementPage() {
     
     try {
       await updateSiteContent({
+        siteName: siteData.siteName,
         hero: heroData,
         features: updatedFeatures,
         about: aboutData,
@@ -175,6 +185,7 @@ export default function ContentManagementPage() {
     
     try {
       await updateSiteContent({
+        siteName: siteData.siteName,
         hero: heroData,
         features: updatedFeatures,
         about: aboutData,
@@ -214,7 +225,27 @@ export default function ContentManagementPage() {
       </div>
 
       <div className="grid grid-cols-12 gap-6">
-        <section className="col-span-8 bg-surface-container-low rounded-xl p-8 border border-outline-variant/5 shadow-2xl relative overflow-hidden">
+        <section className="col-span-6 bg-surface-container-low rounded-xl p-8 border border-outline-variant/5 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-primary/40"></div>
+          <div className="flex items-center gap-3 mb-8">
+            <span className="material-symbols-outlined text-primary">settings</span>
+            <h3 className="text-xl font-bold tracking-tight">Site Identity</h3>
+          </div>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="font-mono text-[10px] uppercase tracking-widest text-zinc-500">Application Name</label>
+              <input
+                className="w-full bg-surface-container-highest border-0 border-b border-outline-variant focus:border-primary focus:ring-0 text-zinc-100 py-3 transition-all placeholder:text-zinc-600 font-bold text-2xl"
+                type="text"
+                value={siteData.siteName}
+                onChange={(e) => setSiteData({ ...siteData, siteName: e.target.value })}
+                placeholder="Remote MCU"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="col-span-6 bg-surface-container-low rounded-xl p-8 border border-outline-variant/5 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-primary/40"></div>
           <div className="flex items-center gap-3 mb-8">
             <span className="material-symbols-outlined text-primary">view_quilt</span>

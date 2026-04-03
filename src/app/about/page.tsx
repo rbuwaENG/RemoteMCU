@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useSiteContent } from "@/lib/hooks/useSiteContent";
 
 export default function AboutPage() {
-  const { content: siteContent, loading } = useSiteContent();
+  const { siteName, content: siteContent, loading } = useSiteContent();
   return (
     <>
       <Navbar />

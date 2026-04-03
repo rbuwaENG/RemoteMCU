@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { createDevice, subscribeToDevicesByOwner, updateDevice, Device } from "@/lib/firestore/devices";
+import { createDevice, subscribeToDevicesByOwner, updateDevice, generateSetupToken, Device } from "@/lib/firestore/devices";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { usePlans } from "@/lib/hooks/usePlans";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -111,7 +111,8 @@ export default function OnboardingWizard({ isOpen, onClose, onDeviceCreated }: O
           port: detectedPort,
           ip: null,
           agentVersion: "1.0.0",
-          sharedWith: []
+          sharedWith: [],
+          setupToken: setupToken
         });
         onDeviceCreated?.(deviceId);
       }

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useDevices } from "@/lib/hooks/useDevices";
-import { deleteDevice, updateDevice, Device, removeActiveSession, setSessionDuration as updateSessionDuration, removeSharedUser, cleanExpiredSessions, leaveSharedDevice } from "@/lib/firestore/devices";
+import { deleteDevice, updateDevice, Device, removeActiveSession, setSessionDuration as updateSessionDuration, removeSharedUser, cleanExpiredSessions, leaveSharedDevice, generateSetupToken } from "@/lib/firestore/devices";
 import { createShareKey } from "@/lib/firestore/shareKeys";
 import { getUserProfiles, UserProfile } from "@/lib/firestore/users";
 import LinkDeviceModal from "@/components/devices/LinkDeviceModal";
@@ -26,6 +26,8 @@ export default function DevicesPage() {
   const [sessionDuration, setSessionDuration] = useState<number>(60);
   const [sharedUserProfiles, setSharedUserProfiles] = useState<Map<string, UserProfile>>(new Map());
   const [progressKey, setProgressKey] = useState(0);
+  const [deviceSetupToken, setDeviceSetupToken] = useState<string | null>(null);
+  const [generatingToken, setGeneratingToken] = useState(false);
 
   useEffect(() => {
     if (selectedDevice) {
@@ -79,7 +81,20 @@ export default function DevicesPage() {
     setDeviceShareKey(null);
     setActiveSessions(device.activeSessions || []);
     setSessionDuration(device.sessionDurationMinutes || 60);
+    setDeviceSetupToken(device.setupToken || null);
     setShowSettingsModal(true);
+  };
+
+  const handleGenerateSetupToken = async () => {
+    if (!selectedDevice) return;
+    setGeneratingToken(true);
+    try {
+      const token = await generateSetupToken(selectedDevice.id);
+      setDeviceSetupToken(token);
+    } catch (error) {
+      console.error("Failed to generate setup token:", error);
+    }
+    setGeneratingToken(false);
   };
 
   const generateShareKey = async () => {
@@ -627,6 +642,33 @@ export default function DevicesPage() {
                     <option value={480}>8 hours</option>
                     <option value={1440}>24 hours</option>
                   </select>
+                </div>
+                <div className="border-t border-[#3C3C3C] pt-4 mt-4">
+                  <label className="block text-[12px] uppercase tracking-wider font-mono text-[#A0A0A0] mb-2">Setup Token</label>
+                  <p className="text-[10px] text-on-surface-variant mb-3">Use this token to connect a device that was skipped during onboarding</p>
+                  {deviceSetupToken ? (
+                    <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary">vpn_key</span>
+                        <span className="font-mono text-primary font-bold tracking-wider">{deviceSetupToken}</span>
+                      </div>
+                      <button 
+                        onClick={() => deviceSetupToken && navigator.clipboard.writeText(deviceSetupToken)}
+                        className="text-xs text-on-surface-variant hover:text-primary"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleGenerateSetupToken}
+                      disabled={generatingToken}
+                      className="w-full py-2 border border-primary/30 text-primary text-xs font-bold rounded-lg hover:bg-primary/10 transition-all flex items-center justify-center gap-2"
+                    >
+                      <span className="material-symbols-outlined text-sm">add</span>
+                      {generatingToken ? "Generating..." : "Generate Setup Token"}
+                    </button>
+                  )}
                 </div>
                 <div className="border-t border-[#3C3C3C] pt-4 mt-4">
                   <label className="block text-[12px] uppercase tracking-wider font-mono text-[#A0A0A0] mb-2">Share Device</label>

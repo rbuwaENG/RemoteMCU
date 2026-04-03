@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useSiteContent } from "@/lib/hooks/useSiteContent";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -11,6 +12,7 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const { user, logout, isAdmin } = useAuth();
+  const { siteName } = useSiteContent();
 
   const sidebarLinks = [
     { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
@@ -51,7 +53,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <span className="material-symbols-outlined text-on-primary-container text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>terminal</span>
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tighter text-[#F0F0F0] leading-none">Remote MCU</h1>
+              <h1 className="text-lg font-bold tracking-tighter text-[#F0F0F0] leading-none">{siteName || "Remote MCU"}</h1>
               <p className="text-[8px] uppercase tracking-[0.2em] text-primary font-bold mt-0.5">Synthetic Workshop</p>
             </div>
           </div>

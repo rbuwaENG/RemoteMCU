@@ -11,6 +11,7 @@ import {
 import { db } from "../firebase";
 
 export interface SiteContent {
+  siteName: string;
   hero: {
     title: string;
     subtext: string;

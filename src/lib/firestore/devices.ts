@@ -29,6 +29,7 @@ export interface Device {
   createdAt: any;
   sharedWith: string[];
   code?: string;
+  setupToken?: string;
   activeSessions?: {
     userId: string;
     displayName: string;
@@ -82,6 +83,18 @@ export const createDevice = async (deviceData: Omit<Device, "id" | "createdAt" |
 export const updateDevice = async (deviceId: string, data: Partial<Device>): Promise<void> => {
   const deviceRef = doc(db, "devices", deviceId);
   await updateDoc(deviceRef, data);
+};
+
+export const generateSetupToken = async (deviceId: string): Promise<string> => {
+  const token = `RMCU-${Date.now().toString(36).toUpperCase()}`;
+  const deviceRef = doc(db, "devices", deviceId);
+  await updateDoc(deviceRef, { setupToken: token });
+  return token;
+};
+
+export const getSetupToken = async (deviceId: string): Promise<string | null> => {
+  const device = await getDevice(deviceId);
+  return device?.setupToken || null;
 };
 
 export const updateDeviceStatus = async (deviceId: string, status: "online" | "offline" | "error"): Promise<void> => {

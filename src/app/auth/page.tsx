@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useSiteContent } from "@/lib/hooks/useSiteContent";
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -15,6 +16,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   
   const { signIn, signUp, signInWithGoogle, user, loading: authLoading } = useAuth();
+  const { siteName } = useSiteContent();
   const router = useRouter();
 
   useEffect(() => {
@@ -87,7 +89,7 @@ export default function AuthPage() {
           <div className="mb-4 flex items-center justify-center bg-surface-container-high rounded-lg p-3">
             <span className="material-symbols-outlined text-primary text-4xl" data-icon="memory">memory</span>
           </div>
-          <h1 className="font-bold text-2xl tracking-tight text-[#F0F0F0]">Remote MCU</h1>
+          <h1 className="font-bold text-2xl tracking-tight text-[#F0F0F0]">{siteName || "Remote MCU"}</h1>
           <p className="font-mono text-[10px] uppercase tracking-widest text-on-surface-variant mt-1">Synthetic Workshop v2.4.0</p>
         </div>
 

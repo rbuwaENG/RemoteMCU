@@ -1,12 +1,15 @@
 import Link from "next/link";
+import { useSiteContent } from "@/lib/hooks/useSiteContent";
 
 export default function Footer() {
+  const { siteName } = useSiteContent();
+  
   return (
     <footer className="h-[80px] bg-[#252526] border-t border-outline-variant/10">
       <div className="container mx-auto px-6 h-full flex justify-between items-center">
         <div className="flex items-center gap-2 text-on-surface-variant">
           <span className="material-symbols-outlined text-primary" data-icon="memory">memory</span>
-          <span className="font-bold text-sm">Remote MCU</span>
+          <span className="font-bold text-sm">{siteName || "Remote MCU"}</span>
         </div>
         <nav className="hidden md:flex gap-8 text-xs font-medium text-on-surface-variant/60 uppercase tracking-widest">
           <Link href="/security" className="hover:text-primary transition-colors">Security</Link>
