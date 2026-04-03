@@ -37,6 +37,8 @@ except ImportError:
 from dotenv import load_dotenv
 load_dotenv()
 
+from setup_wizard import is_configured, run_setup_gui
+
 # ── Constants ──────────────────────────────────────────────────────────────────
 APP_NAME = "RemoteMCU"
 DASHBOARD_URL = os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3001")
@@ -130,6 +132,18 @@ class RemoteMCUTrayApp:
             try:
                 # Import here so startup is fast even if modules are heavy
                 from host_agent import HostAgent
+                from config import DEVICE_ID
+                
+                # Check config
+                if not is_configured():
+                    print("[Tray] Device not configured. Please use 'Setup Device' from the menu.")
+                    self._set_status("idle")
+                    return
+
+                # Ensure DEVICE_ID is freshly loaded if setup just ran from menu
+                import importlib
+                import config
+                importlib.reload(config)
                 from config import DEVICE_ID
 
                 self._agent = HostAgent(DEVICE_ID)
@@ -315,11 +329,21 @@ class RemoteMCUTrayApp:
 
         items.append(pystray.Menu.SEPARATOR)
 
+        # Re-run setup
+        items.append(
+            pystray.MenuItem(
+                "🔧 Setup Device",
+                lambda _: self._run_wizard(),
+            )
+        )
+
+        items.append(pystray.Menu.SEPARATOR)
+
         # Open dashboard
         items.append(
             pystray.MenuItem(
                 "🌐 Open Dashboard",
-                lambda _: webbrowser.open(DASHBOARD_URL),
+                lambda _: webbrowser.open(DASHBOARD_URL.rstrip('/') + "/dashboard"),
             )
         )
 
@@ -344,6 +368,17 @@ class RemoteMCUTrayApp:
 
         return pystray.Menu(*items)
 
+    def _run_wizard(self):
+        """Manually trigger the setup wizard."""
+        import subprocess
+        print("[Tray] Launching Setup Wizard in external process...")
+        
+        script_path = os.path.join(os.path.dirname(__file__), "setup_wizard.py")
+        subprocess.run([sys.executable, script_path, "--force"])
+        
+        # Reload the agent to pick up any new configuration
+        self._restart_agent()
+
     def _update_menu(self):
         """Rebuild and apply the tray menu."""
         if self._tray:
@@ -364,6 +399,15 @@ class RemoteMCUTrayApp:
         Entry point. Creates the tray icon, starts the agent automatically,
         and runs the tray event loop (blocks until quit).
         """
+        # --- Run setup in the main thread on first launch ---
+        if not is_configured():
+            print("[Tray] Launching setup wizard before starting tray...")
+            if run_setup_gui():
+                # Setup success, proceed
+                pass
+            else:
+                print("[Tray] Setup not completed. You can complete it from the menu.")
+        
         # Create the tray icon with the initial "idle" color
         initial_icon = _make_icon(COLORS["idle"])
         self._tray = pystray.Icon(

@@ -13,9 +13,13 @@
 setlocal enabledelayedexpansion
 
 echo.
-echo  ╔══════════════════════════════════════════╗
-echo  ║       RemoteMCU Host Agent Setup         ║
-echo  ╚══════════════════════════════════════════╝
+echo   ____                     _       __  __  ____ _   _ 
+echo  ^|  _ \ ___ _ __ ___   ___^| ^|_ ___^|  \/  ^|/ ___^| ^| ^| ^|
+echo  ^| ^|_) / _ \ '_ ` _ \ / _ \ __/ _ \ ^|\/^| ^| ^|   ^| ^| ^| ^|
+echo  ^|  _ ^<  __/ ^| ^| ^| ^| ^| (_) ^| ^|^|  __/ ^|  ^| ^| ^|___^| ^|_^| ^|
+echo  ^|_^| \_\___^|_^| ^|_^| ^|_^|\___/ \__\___^|_^|  ^|_^|\____^|\___/ 
+echo.
+echo                     Host Agent Setup
 echo.
 
 :: ── Check Python ──────────────────────────────────────────────────────────
@@ -41,28 +45,9 @@ if %ERRORLEVEL% neq 0 (
 )
 echo [OK] Dependencies installed
 
-:: ── Write .env.local prompts if not present ────────────────────────────────
-set ENVFILE=%~dp0.env
-if not exist "%ENVFILE%" (
-    echo.
-    echo [2/3] Creating .env configuration file...
-    echo # RemoteMCU Host Agent Configuration > "%ENVFILE%"
-    echo # Fill in these values from your Firebase console >> "%ENVFILE%"
-    echo FIREBASE_PROJECT_ID=your-project-id >> "%ENVFILE%"
-    echo FIREBASE_ID_TOKEN= >> "%ENVFILE%"
-    echo NEXT_PUBLIC_MQTT_BROKER_URL=wss://your-broker.hivemq.cloud:8884/mqtt >> "%ENVFILE%"
-    echo NEXT_PUBLIC_MQTT_USERNAME= >> "%ENVFILE%"
-    echo NEXT_PUBLIC_MQTT_PASSWORD= >> "%ENVFILE%"
-    echo DEVICE_ID=device-001 >> "%ENVFILE%"
-    echo API_KEY= >> "%ENVFILE%"
-    echo [OK] Created .env — please edit it with your credentials before starting
-) else (
-    echo [2/3] .env file already exists — skipping
-)
-
 :: ── Add to Windows startup via Startup folder (no admin needed) ───────────
 echo.
-echo [3/3] Registering auto-start on Windows login...
+echo [2/2] Registering auto-start on Windows login...
 
 set STARTUP_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
 set SHORTCUT=%STARTUP_DIR%\RemoteMCU Agent.lnk
@@ -78,15 +63,7 @@ if "!PYTHONW!"=="" (
 set SCRIPT=%~dp0src\tray_app.py
 
 :: Use PowerShell to create a proper .lnk shortcut
-powershell -NoProfile -Command ^
-  "$ws = New-Object -ComObject WScript.Shell; ^
-   $s = $ws.CreateShortcut('%SHORTCUT%'); ^
-   $s.TargetPath = '!PYTHONW!'; ^
-   $s.Arguments = '\"!SCRIPT!\"'; ^
-   $s.WorkingDirectory = '%~dp0src'; ^
-   $s.WindowStyle = 7; ^
-   $s.Description = 'RemoteMCU Host Agent'; ^
-   $s.Save()"
+powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%SHORTCUT%'); $s.TargetPath = '!PYTHONW!'; $s.Arguments = '\"!SCRIPT!\"'; $s.WorkingDirectory = '%~dp0src'; $s.WindowStyle = 7; $s.Description = 'RemoteMCU Host Agent'; $s.Save()"
 
 if exist "%SHORTCUT%" (
     echo [OK] Auto-start shortcut created: %SHORTCUT%

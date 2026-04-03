@@ -89,15 +89,17 @@ class FirestoreClient:
     Uses the Firebase ID token stored in the agent's environment.
     """
 
-    def __init__(self, project_id: str, id_token: str):
+    def __init__(self, project_id: str, id_token: str, api_key: str = ""):
         """
         Args:
             project_id: Firebase project ID (e.g. "remotemcu-bfb84")
             id_token:   Firebase Auth ID token for the device's service account,
                         OR the user's ID token obtained during onboarding.
+            api_key:    Firebase Public Web API Key (required if id_token is empty).
         """
         self.project_id = project_id
         self.id_token = id_token
+        self.api_key = api_key
         self._base = _FS_BASE.format(project=project_id)
 
     @classmethod
@@ -230,17 +232,13 @@ class FirestoreClient:
 
     def validate_setup_token(self, token: str) -> Optional[dict]:
         """
-        Query pendingDevices for a matching setupToken.
-        Returns the pending device data if found, else None.
+        Query devices for a matching setupToken.
+        Returns the device data if found, else None.
         """
-        url = f"{self._base}/pendingDevices"
-        params = {
-            "pageSize": 1,
-        }
         # Use Firestore REST structured query
         query_body = {
             "structuredQuery": {
-                "from": [{"collectionId": "pendingDevices"}],
+                "from": [{"collectionId": "devices"}],
                 "where": {
                     "fieldFilter": {
                         "field": {"fieldPath": "setupToken"},
@@ -251,16 +249,36 @@ class FirestoreClient:
                 "limit": 1,
             }
         }
+        
+        # Note: We use the runQuery endpoint. 
+        # For public lookups, this relies on the security rules allowing read Access with a valid API Key.
         run_url = f"https://firestore.googleapis.com/v1/projects/{self.project_id}/databases/(default)/documents:runQuery"
+        
+        params = {}
+        if self.api_key:
+            params["key"] = self.api_key
+
         try:
             resp = requests.post(
-                run_url, headers=self._headers(), json=query_body, timeout=15
+                run_url, 
+                headers=self._headers(), 
+                params=params,
+                json=query_body, 
+                timeout=15
             )
+            
             if resp.status_code == 200:
                 results = resp.json()
+                # Firestore returns a list of results (one per document)
                 for item in results:
                     if "document" in item:
-                        return _doc_to_dict(item["document"])
+                        doc = item["document"]
+                        data = _doc_to_dict(doc)
+                        # Return the original document name/ID as well
+                        data["id"] = doc["name"].split("/")[-1]
+                        return data
+            else:
+                print(f"[Firestore] Setup token validation failed: {resp.status_code} {resp.text}")
             return None
         except requests.RequestException as e:
             print(f"[Firestore] validate_setup_token error: {e}")

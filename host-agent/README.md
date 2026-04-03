@@ -6,26 +6,22 @@ The host-agent is a Python service that runs on the PC connected to your hardwar
 
 ### Windows (Recommended)
 
-1. Make sure **Python 3.10+** is installed and in your PATH
-2. Double-click `install_windows.bat`
-3. The installer will:
-   - Install all Python dependencies
-   - Create a `.env` configuration file
-   - Add the agent to Windows Startup (auto-runs on login)
-   - Launch the system tray icon immediately
-
-4. Edit `host-agent/.env` with your credentials (shown in the dashboard during device onboarding)
-5. Look for the **RemoteMCU circle icon** in your system tray
+1. Make sure **Python 3.10+** is installed and in your PATH.
+2. Download the agent ZIP and extract it to a folder.
+3. Double-click `install_windows.bat`.
+4. The installer will:
+   - Install all Python dependencies.
+   - Add the agent to Windows Startup (auto-runs on login).
+   - Launch the system tray icon immediately.
+5. On the first run, a **Setup Wizard** will appear. 
+6. Get your **Setup Token** from the RemoteMCU Dashboard (**Devices** -> **Setup Agent**).
+7. Paste the token into the wizard. That's it! No `.env` editing required.
 
 ### macOS / Linux (Manual)
 
-```bash
-cd host-agent
-pip install -r requirements.txt
-python src/tray_app.py
-```
-
-To auto-start on login, add the command above to your system's startup applications.
+1. Install dependencies: `pip install -r requirements.txt`
+2. Run the agent: `python src/tray_app.py`
+3. Enter your **Setup Token** when prompted.
 
 ---
 

@@ -10,6 +10,7 @@ import { deleteDevice, updateDevice, Device, removeActiveSession, setSessionDura
 import { createShareKey } from "@/lib/firestore/shareKeys";
 import { getUserProfiles, UserProfile } from "@/lib/firestore/users";
 import LinkDeviceModal from "@/components/devices/LinkDeviceModal";
+import OnboardingWizard from "@/components/devices/OnboardingWizard";
 
 export default function DevicesPage() {
   const { user } = useAuth();
@@ -28,6 +29,7 @@ export default function DevicesPage() {
   const [shareKeyError, setShareKeyError] = useState<string | null>(null);
   const [activeSessions, setActiveSessions] = useState<Device['activeSessions']>([]);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
   const [sessionDuration, setSessionDuration] = useState<number>(60);
   const [sharedUserProfiles, setSharedUserProfiles] = useState<Map<string, UserProfile>>(new Map());
   const [progressKey, setProgressKey] = useState(0);
@@ -539,16 +541,16 @@ export default function DevicesPage() {
           </div>
         ))}
 
-        <Link 
-          href="/dashboard/devices/onboard"
-          className="border-2 border-dashed border-[#3C3C3C] rounded-xl flex flex-col items-center justify-center p-8 bg-surface-container-low/30 hover:bg-surface-container-low/50 transition-all cursor-pointer group"
+        <button 
+          onClick={() => setShowOnboardingWizard(true)}
+          className="w-full border-2 border-dashed border-[#3C3C3C] rounded-xl flex flex-col items-center justify-center p-8 bg-surface-container-low/30 hover:bg-surface-container-low/50 transition-all cursor-pointer group min-h-[220px]"
         >
           <div className="w-12 h-12 rounded-full border border-primary/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
             <span className="material-symbols-outlined text-primary">add</span>
           </div>
           <p className="text-on-surface-variant font-mono text-xs uppercase tracking-widest group-hover:text-primary transition-colors">Register New Device</p>
           <p className="text-[10px] text-on-surface-variant/40 mt-2">Setup and onboard a new device</p>
-        </Link>
+        </button>
       </div>
 
       <div className="mt-16 grid grid-cols-12 gap-8 items-end">
@@ -756,6 +758,14 @@ export default function DevicesPage() {
           </div>
         </div>
       )}
+
+      <OnboardingWizard 
+        isOpen={showOnboardingWizard} 
+        onClose={() => setShowOnboardingWizard(false)}
+        onDeviceCreated={(deviceId) => {
+          setTimeout(() => router.push(`/device/${deviceId}`), 1500);
+        }}
+      />
     </div>
   );
 }

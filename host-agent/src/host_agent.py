@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from config import DEVICE_ID, API_KEY
+from config import DEVICE_ID, PROJECT_ID, API_KEY, MQTT_URL, MQTT_USER, MQTT_PASS
 from mqtt_client import MQTTClient
 from serial_bridge import SerialBridge
 from flasher import Flasher
@@ -37,9 +37,13 @@ class HostAgent:
         self._init_firestore()
 
     def _init_firestore(self):
-        """Initialize the Firestore REST client from environment variables."""
+        """Initialize the Firestore REST client from deobfuscated constants."""
         try:
-            self.firestore = FirestoreClient.from_env()
+            # Check if project_id is available from constants or env
+            if not PROJECT_ID:
+                raise ValueError("FIREBASE_PROJECT_ID not set.")
+                
+            self.firestore = FirestoreClient(PROJECT_ID, id_token="")
             self.job_runner = JobRunner(
                 firestore=self.firestore,
                 compiler=self.compiler,
@@ -47,7 +51,7 @@ class HostAgent:
                 device_id=self.device_id,
                 mqtt_publish_fn=self.mqtt.publish,
             )
-            print("[HostAgent] Firestore client initialised.")
+            print(f"[HostAgent] Firestore client initialised for {PROJECT_ID}")
         except ValueError as e:
             print(f"[HostAgent] WARNING: Firestore not configured — {e}")
             print("[HostAgent] Compile & Flash will not work until FIREBASE_PROJECT_ID is set.")
@@ -269,10 +273,11 @@ class HostAgent:
 
 
 def main():
-    device_id = os.getenv("DEVICE_ID", "test-device")
-    api_key = os.getenv("API_KEY", "")
-    
-    agent = HostAgent(device_id)
+    if not DEVICE_ID:
+        print("[HostAgent] No device configured. Run tray_app.py or setup_wizard.py first.")
+        sys.exit(1)
+        
+    agent = HostAgent(DEVICE_ID)
     
     def signal_handler(sig, frame):
         print("\nShutting down...")

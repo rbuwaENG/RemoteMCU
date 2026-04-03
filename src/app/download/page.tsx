@@ -57,7 +57,11 @@ export default function DownloadAgentPage() {
                 </li>
                 <li className="flex gap-2">
                   <span className="text-primary font-bold">3.</span>
-                  Run: <code className="font-mono text-primary">python src/host_agent.py --token YOUR_TOKEN</code>
+                  Run <code className="font-mono text-primary">install_windows.bat</code>, <code className="font-mono text-primary">install_mac.sh</code>, or <code className="font-mono text-primary">install_linux.sh</code>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-primary font-bold">4.</span>
+                  Right-click the system tray icon and select "Setup Device" to enter your token.
                 </li>
               </ol>
             </div>
@@ -115,7 +119,7 @@ export default function DownloadAgentPage() {
               <h3 className="text-xs font-mono text-on-surface-variant mb-2">Manual Setup (from source)</h3>
               <code className="text-xs font-mono text-primary block">
                 pip install -r requirements.txt<br/>
-                python src/host_agent.py --token YOUR_TOKEN
+                python src/tray_app.py
               </code>
             </div>
           </div>
