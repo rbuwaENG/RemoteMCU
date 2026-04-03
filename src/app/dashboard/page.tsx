@@ -1,13 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useDevices } from "@/lib/hooks/useDevices";
+import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { usePlans } from "@/lib/hooks/usePlans";
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const { addNotification } = useNotifications();
   const { devices, totalDevices, onlineDevices, loading: devicesLoading } = useDevices(user?.uid);
   const { credits, plan: planId, deviceQuota, loading: profileLoading } = useUserProfile(user?.uid);
   const { plans, loading: plansLoading } = usePlans();
@@ -91,10 +95,16 @@ export default function DashboardPage() {
       {totalDevices > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
           {devices.slice(0, 6).map((device) => (
-            <Link
+            <div
               key={device.id}
-              href={`/dashboard/device/${device.id}`}
-              className={`bg-white/5 p-6 rounded-sm border border-white/5 hover:border-primary/30 transition-all group ${device.status === 'offline' ? 'opacity-60' : ''}`}
+              onClick={() => {
+                if (device.status === 'online') {
+                  router.push(`/device/${device.id}`);
+                } else {
+                  addNotification('error', 'Device Offline', 'The host agent needs to be online first.');
+                }
+              }}
+              className={`bg-white/5 p-6 rounded-sm border border-white/5 hover:border-primary/30 transition-all group cursor-pointer ${device.status === 'offline' ? 'opacity-60 grayscale-[0.5]' : ''}`}
             >
               <div className="flex items-center gap-3 mb-4">
                 <span className={`w-2 h-2 rounded-full ${device.status === 'online' ? 'bg-green-500 shadow-[0_0_8px_#4CAF50]' : 'bg-red-500'}`}></span>
@@ -102,9 +112,9 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-center justify-between text-xs font-mono text-on-surface-variant">
                 <span>{device.board}</span>
-                <span className="group-hover:text-primary transition-colors">Open →</span>
+                <span className={`${device.status === 'online' ? 'group-hover:text-primary' : 'text-white/20'} transition-colors`}>Open →</span>
               </div>
-            </Link>
+            </div>
           ))}
           {totalDevices > 6 && (
             <Link href="/dashboard/devices" className="bg-white/5 p-6 rounded-sm border border-dashed border-white/10 flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors">

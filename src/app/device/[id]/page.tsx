@@ -491,6 +491,27 @@ void loop() {
     );
   }
 
+  // ── Device offline guard ───────────────────────────────────────────────
+  if (!loading && device && device.status !== 'online') {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-background text-on-surface gap-6">
+        <div className="relative flex items-center justify-center mb-4">
+          <div className="absolute w-32 h-32 bg-warning/5 rounded-full animate-pulse"></div>
+          <span className="material-symbols-outlined text-7xl text-warning relative z-10" style={{ fontVariationSettings: "'FILL' 1" }}>cloud_off</span>
+        </div>
+        <h1 className="text-3xl font-black tracking-tighter uppercase text-on-surface">Link Interrupted</h1>
+        <p className="text-on-surface-variant font-mono text-sm max-w-sm text-center leading-relaxed">
+          The node <code className="text-primary font-bold">{device.name}</code> is currently offline. 
+          Establish agent connection to synchronize workspace.
+        </p>
+        <div className="flex gap-4 mt-4">
+          <button className="px-6 py-2.5 border border-white/10 rounded text-xs font-bold uppercase tracking-widest hover:bg-white/5 transition-all" onClick={() => router.push("/dashboard")}>Exit to Overview</button>
+          <button className="px-6 py-2.5 bg-primary text-on-primary rounded text-xs font-bold uppercase tracking-widest hover:brightness-110 transition-all" onClick={() => router.push("/dashboard/devices")}>My Devices</button>
+        </div>
+      </div>
+    );
+  }
+
   if (showBootScreen) {
     return (
       <div className="fixed inset-0 bg-background text-on-surface font-body flex flex-col">

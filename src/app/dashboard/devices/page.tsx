@@ -2,16 +2,18 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useDevices } from "@/lib/hooks/useDevices";
+import { useNotifications } from "@/lib/hooks/useNotifications";
 import { deleteDevice, updateDevice, Device, removeActiveSession, setSessionDuration as updateSessionDuration, removeSharedUser, cleanExpiredSessions, leaveSharedDevice, generateSetupToken } from "@/lib/firestore/devices";
 import { createShareKey } from "@/lib/firestore/shareKeys";
-import { useNotifications } from "@/lib/hooks/useNotifications";
 import { getUserProfiles, UserProfile } from "@/lib/firestore/users";
 import LinkDeviceModal from "@/components/devices/LinkDeviceModal";
 
 export default function DevicesPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const { devices, totalDevices, onlineDevices, offlineDevices, loading, refresh } = useDevices(user?.uid);
   const { addNotification } = useNotifications();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -247,7 +249,18 @@ export default function DevicesPage() {
         {filteredDevices.map((device) => (
           <div 
             key={device.id} 
-            className={`bg-[#2D2D2D] border border-[#3C3C3C] rounded-xl overflow-hidden hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] transition-all flex flex-col group ${device.status === 'offline' ? 'opacity-75 grayscale-[0.5]' : ''}`}
+            onClick={(e) => {
+              // If click happened on the card background, navigate to device
+              const target = e.target as HTMLElement;
+              if (target.closest('button') || target.closest('select') || target.closest('input')) return;
+              
+              if (device.status === 'online') {
+                router.push(`/device/${device.id}`);
+              } else {
+                addNotification('error', 'Device Offline', 'The host agent needs to be online first.');
+              }
+            }}
+            className={`bg-[#2D2D2D] border border-[#3C3C3C] rounded-xl overflow-hidden hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)] transition-all flex flex-col group cursor-pointer ${device.status === 'offline' ? 'opacity-75 grayscale-[0.5]' : ''}`}
           >
             <div className="p-5 flex-1">
               <div className="flex justify-between items-start mb-4">
@@ -497,7 +510,13 @@ export default function DevicesPage() {
                 </button>
               ) : (
                 <button 
-                  onClick={() => window.open(`/device/${device.id}`, '_blank')}
+                  onClick={() => {
+                    if (device.status === 'online') {
+                      router.push(`/device/${device.id}`);
+                    } else {
+                      addNotification('error', 'Device Offline', 'The host agent needs to be online first.');
+                    }
+                  }}
                   className="flex-1 bg-primary text-on-primary py-2 rounded-lg text-xs font-bold hover:brightness-110 transition-all flex items-center justify-center gap-2"
                 >
                   <span className="material-symbols-outlined text-sm">terminal</span>

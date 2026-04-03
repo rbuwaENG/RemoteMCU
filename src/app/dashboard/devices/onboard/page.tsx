@@ -11,7 +11,7 @@ export default function OnboardPage() {
 
   const handleDeviceCreated = (deviceId: string) => {
     setTimeout(() => {
-      router.push(`/dashboard/device/${deviceId}`);
+      router.push(`/device/${deviceId}`);
     }, 1500);
   };
 

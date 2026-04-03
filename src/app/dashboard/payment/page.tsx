@@ -25,7 +25,6 @@ export default function PaymentPage() {
     price: selectedPlan.price
   } : { name: "Popular", credits: 200, price: 9.99 };
 
-  const [paymentMethod, setPaymentMethod] = useState("credit_card");
   const [cardDetails, setCardDetails] = useState({
     name: "",
     number: "",
@@ -154,11 +153,11 @@ export default function PaymentPage() {
         <div className="mb-10 flex items-center justify-between">
           <div>
             <h1 className="text-[28px] font-extrabold text-[#F0F0F0] tracking-tight mb-2">
-              {needsPayment ? "Checkout" : "Subscribe"}
+              Checkout
             </h1>
             <p className="text-on-surface-variant font-mono text-xs uppercase tracking-widest flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${needsPayment ? 'bg-primary' : 'bg-success'}`}></span>
-              {needsPayment ? "Secure Transaction - Encrypted Channel" : "Free Plan Activation"}
+              <span className="w-2 h-2 rounded-full bg-primary"></span>
+              Secure Transaction - Encrypted Channel
             </p>
           </div>
           <Link href="/dashboard/credits" className="text-sm font-medium text-outline flex items-center gap-1 hover:text-on-surface transition-colors">
@@ -171,35 +170,18 @@ export default function PaymentPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
           {/* Left Column: Payment Form */}
           <div className="lg:col-span-7 space-y-8">
-            {/* Payment Method Toggle */}
+            {/* Payment Method - Only Credit Card */}
             <section>
               <h3 className="text-xs font-mono text-primary mb-4 uppercase tracking-tighter">01. Payment Method</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <label className="cursor-pointer group">
-                  <input
-                    checked={paymentMethod === "credit_card"}
-                    className="hidden peer"
-                    name="payment_type"
-                    type="radio"
-                    onChange={() => setPaymentMethod("credit_card")}
-                  />
-                  <div className="p-4 bg-surface-container-low border border-transparent peer-checked:border-primary peer-checked:bg-surface-container-high rounded-xl transition-all flex items-center justify-center gap-3">
-                    <span className="material-symbols-outlined text-outline group-hover:text-primary transition-colors">credit_card</span>
-                    <span className="text-sm font-semibold">Credit Card</span>
-                  </div>
-                </label>
-                <label className="cursor-pointer group">
-                  <input
-                    className="hidden peer"
-                    name="payment_type"
-                    type="radio"
-                    onChange={() => setPaymentMethod("paypal")}
-                  />
-                  <div className="p-4 bg-surface-container-low border border-transparent peer-checked:border-primary peer-checked:bg-surface-container-high rounded-xl transition-all flex items-center justify-center gap-3">
-                    <span className="material-symbols-outlined text-outline group-hover:text-primary transition-colors">account_balance_wallet</span>
-                    <span className="text-sm font-semibold">Paypal</span>
-                  </div>
-                </label>
+              <div className="flex items-center gap-3 p-4 bg-surface-container-high border border-primary/30 rounded-xl max-w-xs transition-all shadow-[0_0_15px_rgba(103,215,221,0.05)]">
+                <span className="material-symbols-outlined text-primary">credit_card</span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-white uppercase tracking-wider">Credit Card</span>
+                  <span className="text-[10px] text-on-surface-variant font-mono">VISA • MASTERCARD • AMEX</span>
+                </div>
+                <div className="ml-auto">
+                  <span className="material-symbols-outlined text-primary text-sm">verified</span>
+                </div>
               </div>
             </section>
 
@@ -210,9 +192,10 @@ export default function PaymentPage() {
                 <div className="group">
                   <label className="block text-[10px] font-mono text-on-surface-variant uppercase mb-1 ml-1">Cardholder Name</label>
                   <input
-                    className="w-full bg-[#1b1b1c] border border-outline-variant rounded-lg px-4 py-3 text-[#F0F0F0] font-mono text-sm tracking-widest placeholder:opacity-30"
+                    className="w-full bg-[#1b1b1c] border border-outline-variant rounded-lg px-4 py-3 text-[#F0F0F0] font-mono text-sm tracking-widest placeholder:opacity-30 focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all"
                     placeholder="ALEXANDER STERLING"
                     type="text"
+                    autoComplete="name"
                     value={cardDetails.name}
                     onChange={(e) => setCardDetails({ ...cardDetails, name: e.target.value })}
                   />
@@ -221,21 +204,26 @@ export default function PaymentPage() {
                   <label className="block text-[10px] font-mono text-on-surface-variant uppercase mb-1 ml-1">Card Number</label>
                   <div className="relative">
                     <input
-                      className="w-full bg-[#1b1b1c] border border-outline-variant rounded-lg px-4 py-3 text-[#F0F0F0] font-mono text-sm tracking-widest placeholder:opacity-30"
+                      className="w-full bg-[#1b1b1c] border border-outline-variant rounded-lg px-4 py-3 text-[#F0F0F0] font-mono text-sm tracking-widest placeholder:opacity-30 focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all"
                       placeholder=".... .... .... ...."
                       type="text"
+                      autoComplete="cc-number"
                       value={cardDetails.number}
                       onChange={(e) => setCardDetails({ ...cardDetails, number: e.target.value })}
                     />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-1 opacity-40">
+                      <span className="material-symbols-outlined text-xs">payments</span>
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="group">
                     <label className="block text-[10px] font-mono text-on-surface-variant uppercase mb-1 ml-1">Expiration Date</label>
                     <input
-                      className="w-full bg-[#1b1b1c] border border-outline-variant rounded-lg px-4 py-3 text-[#F0F0F0] font-mono text-sm tracking-widest placeholder:opacity-30 text-center"
+                      className="w-full bg-[#1b1b1c] border border-outline-variant rounded-lg px-4 py-3 text-[#F0F0F0] font-mono text-sm tracking-widest placeholder:opacity-30 text-center focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all"
                       placeholder="MM / YY"
                       type="text"
+                      autoComplete="cc-exp"
                       value={cardDetails.expiry}
                       onChange={(e) => setCardDetails({ ...cardDetails, expiry: e.target.value })}
                     />
@@ -243,9 +231,10 @@ export default function PaymentPage() {
                   <div className="group">
                     <label className="block text-[10px] font-mono text-on-surface-variant uppercase mb-1 ml-1">CVV / CVC</label>
                     <input
-                      className="w-full bg-[#1b1b1c] border border-outline-variant rounded-lg px-4 py-3 text-[#F0F0F0] font-mono text-sm tracking-widest placeholder:opacity-30 text-center"
+                      className="w-full bg-[#1b1b1c] border border-outline-variant rounded-lg px-4 py-3 text-[#F0F0F0] font-mono text-sm tracking-widest placeholder:opacity-30 text-center focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all"
                       placeholder="..."
                       type="password"
+                      autoComplete="cc-csc"
                       value={cardDetails.cvv}
                       onChange={(e) => setCardDetails({ ...cardDetails, cvv: e.target.value })}
                     />
@@ -279,7 +268,7 @@ export default function PaymentPage() {
                 <h4 className="text-lg font-bold text-[#F0F0F0]">
                   {selectedPkg.name} {isSubscription ? "Plan" : "Pack"} - {selectedPkg.credits} Credits
                 </h4>
-                <p className="text-xs text-on-surface-variant mt-1">
+                <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">
                   {isSubscription 
                     ? `Monthly plan with ${selectedPkg.credits} credits. Auto-renews every 30 days.`
                     : "High-density remote debugging & cloud execution hours."}
@@ -305,7 +294,7 @@ export default function PaymentPage() {
                   <span className="text-2xl font-black text-primary">${selectedPkg.price}{isSubscription && <span className="text-sm font-normal">/mo</span>}</span>
                 </div>
                 {isSubscription && (
-                  <div className="flex items-center gap-2 text-xs text-success mt-2">
+                  <div className="flex items-center gap-2 text-xs text-success mt-2 font-medium">
                     <span className="material-symbols-outlined text-sm">autorenew</span>
                     Auto-renews every 30 days. Cancel anytime.
                   </div>
@@ -317,7 +306,7 @@ export default function PaymentPage() {
                 <button
                   onClick={handleSubmit}
                   disabled={processing}
-                  className="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary-fixed font-black py-4 rounded-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary-fixed font-black py-4 rounded-lg shadow-lg shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {processing ? (
                     <>Processing...</>
@@ -335,7 +324,7 @@ export default function PaymentPage() {
               </div>
 
               {/* Trust Badges */}
-              <div className="mt-8 pt-8 border-t border-outline-variant border-opacity-20 grid grid-cols-3 gap-2 opacity-50">
+              <div className="mt-8 pt-8 border-t border-outline-variant border-opacity-20 grid grid-cols-3 gap-2 opacity-30">
                 <div className="flex flex-col items-center gap-1 text-center">
                   <span className="material-symbols-outlined text-lg">shield_with_heart</span>
                   <span className="text-[8px] font-mono uppercase">Secure</span>
